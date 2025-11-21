@@ -30,6 +30,6 @@ def login_action(
             {"request": request, "error": "Usuario o contraseña incorrectos."}
         )
     
-    # Por ahora solo redirigimos, luego agregaremos sesiones reale
+    # Por ahora solo redirigimos, luego agregaremos sesiones real
     response = RedirectResponse(url="/", status_code=303)
     return response
