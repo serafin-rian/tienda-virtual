@@ -98,3 +98,5 @@ def delete_product(
     db.delete(product)
     db.commit()
     return {"message": f"Producto '{product.name}' eliminado exitosamente"}
+
+
