@@ -31,3 +31,15 @@ class Product(SQLModel, table=True):
     # Relación con el usuario dueño
     owner_id: Optional[int] = Field(default=None, foreign_key="user.id")
     owner: Optional[User] = Relationship(back_populates="products")
+
+# ======================================================
+# 📝 Modelo Historial (Auditoría) - 🔥 AGREGAR ESTO
+# ======================================================
+class AuditLog(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    action: str  # "DELETE_USER", "DELETE_PRODUCT", etc.
+    target_id: int  # ID del elemento eliminado
+    target_name: str  # Nombre del elemento eliminado
+    performed_by: str  # Usuario que realizó la acción
+    performed_at: datetime = Field(default_factory=datetime.utcnow)
+    details: Optional[str] = None  # Información adicional

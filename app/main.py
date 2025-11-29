@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from .database import init_db
-from .models import User, Product
+from .models import User, Product, AuditLog
 from .routers import users, auth_router, products
 from app.algorithms.router import router as algorithms_router
+from .routers import audit  # Agregar este import
+
 
 app = FastAPI()
 
@@ -15,7 +17,7 @@ def on_startup():
 app.include_router(users.router)
 app.include_router(auth_router.router)
 app.include_router(products.router)
-
+app.include_router(audit.router)  # Agregar esta línea
 app.include_router(algorithms_router)
 
 @app.get("/")
