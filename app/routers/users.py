@@ -18,6 +18,14 @@ def create_user(user: User, session: Session = Depends(get_session)):
     if db_user:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe.")
 
+    # Validar rol (solo admin, vendor, customer permitidos)
+    valid_roles = ["admin", "vendor", "customer"]
+    if user.role not in valid_roles:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Rol inválido. Debe ser uno de: {', '.join(valid_roles)}"
+        )
+
     # Hashear la contraseña antes de guardar
     user.hashed_password = hash_password(user.hashed_password)
     session.add(user)
@@ -59,6 +67,15 @@ def update_user(
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
+
+    # Validar rol si se está actualizando
+    if updated_user.role:
+        valid_roles = ["admin", "vendor", "customer"]
+        if updated_user.role not in valid_roles:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Rol inválido. Debe ser uno de: {', '.join(valid_roles)}"
+            )
 
     # Actualizamos los campos básicos
     user.username = updated_user.username
@@ -123,6 +140,13 @@ def search_users(
     if username:
         query = query.where(User.username.ilike(f"%{username}%"))
     if role:
+        # Validar que el rol sea uno de los permitidos
+        valid_roles = ["admin", "vendor", "customer"]
+        if role not in valid_roles:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Rol inválido. Debe ser uno de: {', '.join(valid_roles)}"
+            )
         query = query.where(User.role == role)
     
     users = session.exec(query).all()
@@ -144,7 +168,8 @@ def get_users_stats(
     
     total_users = len(users)
     admin_count = sum(1 for user in users if user.role == "admin")
-    client_count = sum(1 for user in users if user.role == "client")
+    vendor_count = sum(1 for user in users if user.role == "vendor")
+    customer_count = sum(1 for user in users if user.role == "customer")
     
     # Usuarios con productos
     users_with_products = sum(1 for user in users if len(user.products) > 0)
@@ -156,13 +181,20 @@ def get_users_stats(
     return {
         "total_users": total_users,
         "admin_users": admin_count,
-        "client_users": client_count,
+        "vendor_users": vendor_count,
+        "customer_users": customer_count,
         "users_with_products": users_with_products,
         "total_products": total_products,
         "average_products_per_user": round(total_products / total_users, 2) if total_users > 0 else 0,
         "latest_user": {
             "username": latest_user.username if latest_user else None,
-            "created_at": latest_user.created_at if latest_user else None
+            "created_at": latest_user.created_at if latest_user else None,
+            "role": latest_user.role if latest_user else None
+        },
+        "roles_distribution": {
+            "admin": f"{(admin_count/total_users)*100:.1f}%" if total_users > 0 else "0%",
+            "vendor": f"{(vendor_count/total_users)*100:.1f}%" if total_users > 0 else "0%",
+            "customer": f"{(customer_count/total_users)*100:.1f}%" if total_users > 0 else "0%"
         }
     }
 
@@ -231,4 +263,40 @@ def get_user_details(
             "total_inventory_value": sum(product.price * product.quantity for product in user.products),
             "average_product_price": sum(product.price for product in user.products) / len(user.products) if user.products else 0
         }
+    }
+
+# ======================================================
+# 🔄 CAMBIAR ROL DE USUARIO (solo admin)
+# ======================================================
+@router.patch("/{user_id}/role")
+def change_user_role(
+    user_id: int,
+    new_role: str,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Cambia el rol de un usuario (solo admin)"""
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden cambiar roles")
+    
+    user = session.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    
+    # Validar nuevo rol
+    valid_roles = ["admin", "vendor", "customer"]
+    if new_role not in valid_roles:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Rol inválido. Debe ser uno de: {', '.join(valid_roles)}"
+        )
+    
+    old_role = user.role
+    user.role = new_role
+    session.add(user)
+    session.commit()
+    
+    return {
+        "message": f"Rol de usuario '{user.username}' cambiado de '{old_role}' a '{new_role}'",
+        "user": user
     }
