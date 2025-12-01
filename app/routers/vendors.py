@@ -3,36 +3,28 @@ from sqlmodel import Session, select
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from ..database import get_session
-from ..models import User, Product, Order, OrderItem, Cart, CartItem
+from ..models import User, Product, Order, OrderItem
 from .auth_router import get_current_user
+from ..permissions import require_vendor, require_admin_or_vendor, PermissionChecker  # ✅ Nuevos imports
 
 router = APIRouter(prefix="/vendors", tags=["vendors"])
-
-# ======================================================
-# 🔐 VERIFICAR SI ES VENDEDOR
-# ======================================================
-def get_vendor_user(current_user: User = Depends(get_current_user)):
-    """Verifica que el usuario actual sea vendedor"""
-    if current_user.role != "vendor":
-        raise HTTPException(
-            status_code=403, 
-            detail="Se requieren permisos de vendedor"
-        )
-    return current_user
 
 # ======================================================
 # 📊 PANEL DE CONTROL DEL VENDEDOR
 # ======================================================
 @router.get("/dashboard")
+@require_vendor  # ✅ Usar decorador
 def vendor_dashboard(
     days: int = Query(30, description="Estadísticas de últimos X días"),
     session: Session = Depends(get_session),
-    vendor_user: User = Depends(get_vendor_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Panel de control principal para vendedores"""
+    # ✅ El decorador @require_vendor ya verificó los permisos
+    
     # Obtener productos del vendedor
     products = session.exec(
-        select(Product).where(Product.owner_id == vendor_user.id)
+        select(Product).where(Product.owner_id == current_user.id)
     ).all()
     
     # Obtener todas las órdenes
@@ -51,11 +43,11 @@ def vendor_dashboard(
         # Verificar si la orden contiene productos del vendedor
         for item in order_items:
             product = session.get(Product, item.product_id)
-            if product and product.owner_id == vendor_user.id:
+            if product and product.owner_id == current_user.id:
                 vendor_orders.append(order)
                 vendor_revenue += item.subtotal
                 vendor_items_sold += item.quantity
-                break  # Solo contar la orden una vez
+                break
     
     # Calcular fechas para estadísticas recientes
     recent_date = datetime.utcnow() - timedelta(days=days)
@@ -63,7 +55,7 @@ def vendor_dashboard(
     recent_revenue = sum(
         sum(item.subtotal for item in session.exec(
             select(OrderItem).where(OrderItem.order_id == order.id)
-        ).all() if session.get(Product, item.product_id).owner_id == vendor_user.id)
+        ).all() if session.get(Product, item.product_id).owner_id == current_user.id)
         for order in recent_orders
     )
     
@@ -76,7 +68,7 @@ def vendor_dashboard(
         
         for item in order_items:
             product = session.get(Product, item.product_id)
-            if product and product.owner_id == vendor_user.id:
+            if product and product.owner_id == current_user.id:
                 if product.id not in product_sales:
                     product_sales[product.id] = {
                         "product_id": product.id,
@@ -95,9 +87,9 @@ def vendor_dashboard(
     
     return {
         "vendor_info": {
-            "id": vendor_user.id,
-            "username": vendor_user.username,
-            "joined_date": vendor_user.created_at,
+            "id": current_user.id,
+            "username": current_user.username,
+            "joined_date": current_user.created_at,
             "total_products": len(products)
         },
         "sales_overview": {
@@ -126,11 +118,12 @@ def vendor_dashboard(
 # 📈 VENTAS DEL VENDEDOR
 # ======================================================
 @router.get("/sales")
+@require_vendor  # ✅ Usar decorador
 def vendor_sales(
     start_date: str = Query(None, description="Fecha inicio (YYYY-MM-DD)"),
     end_date: str = Query(None, description="Fecha fin (YYYY-MM-DD)"),
     session: Session = Depends(get_session),
-    vendor_user: User = Depends(get_vendor_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Reporte de ventas detallado del vendedor"""
     # Obtener todas las órdenes
@@ -161,7 +154,7 @@ def vendor_sales(
         
         for item in order_items:
             product = session.get(Product, item.product_id)
-            if product and product.owner_id == vendor_user.id:
+            if product and product.owner_id == current_user.id:
                 order_vendor_items.append({
                     "product_id": product.id,
                     "product_name": product.name,
@@ -205,16 +198,17 @@ def vendor_sales(
 # 📦 INVENTARIO DEL VENDEDOR
 # ======================================================
 @router.get("/inventory")
+@require_vendor  # ✅ Usar decorador
 def vendor_inventory(
     in_stock: bool = Query(None, description="Filtrar por stock"),
     low_stock: bool = Query(None, description="Solo productos con stock bajo (<10)"),
     sort_by: str = Query("name", description="Ordenar por: name, price, quantity, created_at"),
     order: str = Query("asc", description="Orden: asc o desc"),
     session: Session = Depends(get_session),
-    vendor_user: User = Depends(get_vendor_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Gestión de inventario del vendedor"""
-    query = select(Product).where(Product.owner_id == vendor_user.id)
+    query = select(Product).where(Product.owner_id == current_user.id)
     
     # Aplicar filtros
     if in_stock is not None:
@@ -257,9 +251,10 @@ def vendor_inventory(
 # 👥 CLIENTES DEL VENDEDOR
 # ======================================================
 @router.get("/customers")
+@require_vendor  # ✅ Usar decorador
 def vendor_customers(
     session: Session = Depends(get_session),
-    vendor_user: User = Depends(get_vendor_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Clientes que han comprado productos del vendedor"""
     all_orders = session.exec(select(Order)).all()
@@ -277,7 +272,7 @@ def vendor_customers(
         
         for item in order_items:
             product = session.get(Product, item.product_id)
-            if product and product.owner_id == vendor_user.id:
+            if product and product.owner_id == current_user.id:
                 has_vendor_products = True
                 order_vendor_total += item.subtotal
         
@@ -320,15 +315,16 @@ def vendor_customers(
 # 📊 ESTADÍSTICAS DE VENTAS POR PRODUCTO
 # ======================================================
 @router.get("/products/sales-stats")
+@require_vendor  # ✅ Usar decorador
 def vendor_products_sales_stats(
     days: int = Query(30, description="Período en días"),
     session: Session = Depends(get_session),
-    vendor_user: User = Depends(get_vendor_user)
+    current_user: User = Depends(get_current_user)
 ):
     """Estadísticas de ventas por producto"""
     # Obtener productos del vendedor
     products = session.exec(
-        select(Product).where(Product.owner_id == vendor_user.id)
+        select(Product).where(Product.owner_id == current_user.id)
     ).all()
     
     # Período de tiempo
@@ -379,4 +375,75 @@ def vendor_products_sales_stats(
             if p["needs_restock"] or p["low_stock"]
         ],
         "all_products_stats": product_stats
+    }
+
+# ======================================================
+# 🔄 SINCRONIZAR INVENTARIO (actualizar stock masivo)
+# ======================================================
+@router.post("/inventory/sync")
+@require_vendor  # ✅ Usar decorador
+def sync_inventory(
+    updates: List[Dict[str, Any]],
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Actualiza el stock de múltiples productos a la vez"""
+    updated_products = []
+    errors = []
+    
+    for update in updates:
+        product_id = update.get("product_id")
+        new_quantity = update.get("quantity")
+        
+        if not product_id or new_quantity is None:
+            errors.append(f"Faltan datos en update: {update}")
+            continue
+        
+        if new_quantity < 0:
+            errors.append(f"Cantidad inválida para producto {product_id}: {new_quantity}")
+            continue
+        
+        product = session.get(Product, product_id)
+        if not product:
+            errors.append(f"Producto no encontrado: ID {product_id}")
+            continue
+        
+        # ✅ Verificar que el producto pertenece al vendedor
+        if product.owner_id != current_user.id:
+            errors.append(f"No tienes permisos para actualizar el producto: {product.name}")
+            continue
+        
+        old_quantity = product.quantity
+        product.quantity = new_quantity
+        session.add(product)
+        
+        updated_products.append({
+            "product_id": product_id,
+            "product_name": product.name,
+            "old_quantity": old_quantity,
+            "new_quantity": new_quantity,
+            "change": new_quantity - old_quantity
+        })
+    
+    if errors:
+        session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Algunas actualizaciones fallaron",
+                "errors": errors,
+                "successful_updates": len(updated_products)
+            }
+        )
+    
+    session.commit()
+    
+    return {
+        "message": f"Inventario actualizado exitosamente",
+        "total_updated": len(updated_products),
+        "updated_products": updated_products,
+        "inventory_value": round(sum(
+            session.get(Product, p["product_id"]).price * p["new_quantity"] 
+            for p in updated_products
+        ), 2)
     }

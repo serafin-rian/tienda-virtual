@@ -7,32 +7,13 @@ from ..models import Product, User, AuditLog
 from .auth_router import get_current_user
 from ..permissions import PermissionChecker, require_admin_or_vendor
 
-
 router = APIRouter(prefix="/products", tags=["products"])
 
 # ======================================================
-# 🔐 FUNCIONES HELPER PARA PERMISOS
-# ======================================================
-def can_create_product(user: User) -> bool:
-    """Verifica si el usuario puede crear productos"""
-    return user.role in ["admin", "vendor"]
-
-def can_edit_product(user: User, product_owner_id: int) -> bool:
-    """Verifica si el usuario puede editar un producto"""
-    if user.role == "admin":
-        return True
-    if user.role == "vendor" and user.id == product_owner_id:
-        return True
-    return False
-
-def can_delete_product(user: User, product_owner_id: int) -> bool:
-    """Verifica si el usuario puede eliminar un producto"""
-    return can_edit_product(user, product_owner_id)  # Mismas reglas que editar
-
-# ======================================================
-# 🟢 CREAR PRODUCTO (admin y vendedores)
+# 🟢 CREAR PRODUCTO (admin y vendedores) - CON DECORADOR
 # ======================================================
 @router.post("/create")
+@require_admin_or_vendor
 def create_product(
     name: str = Form(...),
     description: str = Form(None),
@@ -43,11 +24,7 @@ def create_product(
     current_user: User = Depends(get_current_user)
 ):
     """Crea un nuevo producto (admin y vendedores)"""
-    if not can_create_product(current_user):
-        raise HTTPException(
-            status_code=403, 
-            detail="No tienes permisos para crear productos. Solo administradores y vendedores pueden crear productos."
-        )
+    # ✅ El decorador @require_admin_or_vendor ya verificó los permisos
 
     product = Product(
         name=name,
@@ -55,7 +32,7 @@ def create_product(
         price=price,
         quantity=quantity,
         image_path=image_path,
-        owner_id=current_user.id  # El producto pertenece al usuario que lo crea
+        owner_id=current_user.id
     )
     session.add(product)
     session.commit()
@@ -94,12 +71,8 @@ def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    # Verificar permisos
-    if not can_edit_product(current_user, product.owner_id):
-        raise HTTPException(
-            status_code=403, 
-            detail="No tienes permisos para editar este producto. Solo administradores o el vendedor dueño pueden editarlo."
-        )
+    # ✅ Usar PermissionChecker para verificar permisos
+    PermissionChecker.check_product_edit(current_user, product)
 
     # Actualizar campos
     if name:
@@ -138,12 +111,8 @@ def delete_product(
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    # Verificar permisos
-    if not can_delete_product(current_user, product.owner_id):
-        raise HTTPException(
-            status_code=403, 
-            detail="No tienes permisos para eliminar este producto. Solo administradores o el vendedor dueño pueden eliminarlo."
-        )
+    # ✅ Usar PermissionChecker para verificar permisos
+    PermissionChecker.check_product_delete(current_user, product)
 
     # 🔥 REGISTRAR EN HISTORIAL ANTES de eliminar
     audit_log = AuditLog(
@@ -294,16 +263,13 @@ def get_product_owner(
 # 📈 ESTADÍSTICAS DE PRODUCTOS DEL VENDEDOR ACTUAL
 # ======================================================
 @router.get("/my-stats")
+@require_admin_or_vendor
 def get_my_products_stats(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
     """Estadísticas de los productos del usuario actual (vendedor o admin)"""
-    if current_user.role not in ["admin", "vendor"]:
-        raise HTTPException(
-            status_code=403, 
-            detail="Solo administradores y vendedores pueden ver estadísticas de productos"
-        )
+    # ✅ El decorador ya verificó que es admin o vendor
     
     # Filtrar productos por dueño (a menos que sea admin)
     if current_user.role == "admin":
@@ -344,7 +310,7 @@ def get_my_products_stats(
             "most_expensive_product": most_expensive.name,
             "cheapest_product": cheapest.name
         },
-        "products_by_category": "Por implementar",  # Futura feature
+        "products_by_category": "Por implementar",
         "recently_added": [
             product.name for product in 
             sorted(products, key=lambda x: x.created_at, reverse=True)[:5]
@@ -355,6 +321,7 @@ def get_my_products_stats(
 # 🏪 MIS PRODUCTOS (para vendedores)
 # ======================================================
 @router.get("/my-products", response_model=List[Product])
+@require_admin_or_vendor
 def get_my_products(
     skip: int = 0,
     limit: int = 50,
@@ -363,11 +330,7 @@ def get_my_products(
     current_user: User = Depends(get_current_user)
 ):
     """Obtiene los productos del usuario actual (vendedor)"""
-    if current_user.role not in ["admin", "vendor"]:
-        raise HTTPException(
-            status_code=403, 
-            detail="Solo administradores y vendedores pueden ver sus productos"
-        )
+    # ✅ El decorador ya verificó que es admin o vendor
     
     query = select(Product).where(Product.owner_id == current_user.id)
     

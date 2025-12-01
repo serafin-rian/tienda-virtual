@@ -6,6 +6,7 @@ from datetime import datetime
 from ..database import get_session
 from ..models import Cart, CartItem, Product, User, Order, OrderItem
 from .auth_router import get_current_user
+from ..permissions import PermissionChecker  # ✅ Nuevo import
 
 router = APIRouter(prefix="/cart", tags=["cart"])
 
@@ -18,6 +19,9 @@ def get_cart(
     current_user: User = Depends(get_current_user)
 ):
     """Obtiene el carrito de compras del usuario actual"""
+    # ✅ Usar PermissionChecker
+    # (Aunque este endpoint ya verifica por current_user, es buena práctica)
+    
     # Buscar o crear carrito para el usuario
     cart = session.exec(
         select(Cart).where(Cart.user_id == current_user.id)
@@ -127,6 +131,9 @@ def update_cart_item(
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
     
+    # ✅ Verificar permisos usando PermissionChecker
+    PermissionChecker.check_cart_view(current_user, cart.user_id)
+    
     # Buscar item en el carrito
     cart_item = session.exec(
         select(CartItem)
@@ -165,6 +172,9 @@ def remove_from_cart(
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
     
+    # ✅ Verificar permisos usando PermissionChecker
+    PermissionChecker.check_cart_view(current_user, cart.user_id)
+    
     # Buscar item en el carrito
     cart_item = session.exec(
         select(CartItem)
@@ -199,6 +209,9 @@ def clear_cart(
     
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
+    
+    # ✅ Verificar permisos usando PermissionChecker
+    PermissionChecker.check_cart_view(current_user, cart.user_id)
     
     # Eliminar todos los items del carrito
     cart_items = session.exec(
@@ -235,6 +248,9 @@ def get_cart_summary(
             "items": []
         }
     
+    # ✅ Verificar permisos usando PermissionChecker
+    PermissionChecker.check_cart_view(current_user, cart.user_id)
+    
     # Obtener items del carrito con información del producto
     cart_items = session.exec(
         select(CartItem).where(CartItem.cart_id == cart.id)
@@ -266,6 +282,7 @@ def get_cart_summary(
         "cart_id": cart.id,
         "last_updated": cart.updated_at
     }
+
 # ======================================================
 # 🛍️ PROCESAR CHECKOUT
 # ======================================================
@@ -284,6 +301,9 @@ def checkout(
     
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
+    
+    # ✅ Verificar permisos usando PermissionChecker
+    PermissionChecker.check_cart_view(current_user, cart.user_id)
     
     # Obtener items del carrito
     cart_items = session.exec(

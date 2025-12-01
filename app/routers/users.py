@@ -5,6 +5,7 @@ from ..database import get_session
 from ..models import User, AuditLog, Product
 from ..auth import hash_password
 from .auth_router import get_current_user
+from ..permissions import PermissionChecker, require_admin  # ✅ Nuevos imports
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -18,7 +19,7 @@ def create_user(user: User, session: Session = Depends(get_session)):
     if db_user:
         raise HTTPException(status_code=400, detail="El nombre de usuario ya existe.")
 
-    # Validar rol (solo admin, vendor, customer permitidos)
+    # Validar rol
     valid_roles = ["admin", "vendor", "customer"]
     if user.role not in valid_roles:
         raise HTTPException(
@@ -37,16 +38,11 @@ def create_user(user: User, session: Session = Depends(get_session)):
 # 📋 LISTAR TODOS LOS USUARIOS (solo admin)
 # ======================================================
 @router.get("/", response_model=List[User])
+@require_admin  # ✅ Usar decorador
 def list_users(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="No tienes permisos para ver esta lista."
-        )
-
     users = session.exec(select(User)).all()
     return users
 
@@ -54,16 +50,13 @@ def list_users(
 # ✏️ ACTUALIZAR USUARIO (solo admin)
 # ======================================================
 @router.put("/{user_id}", response_model=User)
+@require_admin  # ✅ Usar decorador
 def update_user(
     user_id: int,
     updated_user: User,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    # Solo los administradores pueden editar usuarios
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="No tienes permisos para editar usuarios")
-
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -94,15 +87,12 @@ def update_user(
 # 🗑️ ELIMINAR USUARIO (solo admin) - CON HISTORIAL
 # ======================================================
 @router.delete("/{user_id}")
+@require_admin  # ✅ Usar decorador
 def delete_user(
     user_id: int,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    # Solo los administradores pueden eliminar usuarios
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="No tienes permisos para eliminar usuarios")
-
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -125,6 +115,7 @@ def delete_user(
 # 🔍 BUSCAR USUARIOS (solo admin)
 # ======================================================
 @router.get("/search", response_model=List[User])
+@require_admin  # ✅ Usar decorador
 def search_users(
     username: Optional[str] = None,
     role: Optional[str] = None,
@@ -132,15 +123,11 @@ def search_users(
     current_user: User = Depends(get_current_user)
 ):
     """Busca usuarios por nombre o rol (solo admin)"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="No tienes permisos para buscar usuarios")
-    
     query = select(User)
     
     if username:
         query = query.where(User.username.ilike(f"%{username}%"))
     if role:
-        # Validar que el rol sea uno de los permitidos
         valid_roles = ["admin", "vendor", "customer"]
         if role not in valid_roles:
             raise HTTPException(
@@ -156,14 +143,12 @@ def search_users(
 # 📊 ESTADÍSTICAS DE USUARIOS (solo admin)
 # ======================================================
 @router.get("/stats")
+@require_admin  # ✅ Usar decorador
 def get_users_stats(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
     """Estadísticas de usuarios (solo admin)"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="No tienes permisos para ver estadísticas")
-    
     users = session.exec(select(User)).all()
     
     total_users = len(users)
@@ -213,12 +198,12 @@ def get_user_products(
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
-    # Solo admin puede ver productos de otros usuarios, usuarios normales solo los suyos
-    if current_user.role != "admin" and current_user.id != user_id:
-        raise HTTPException(
-            status_code=403, 
-            detail="No tienes permisos para ver productos de otros usuarios"
-        )
+    # ✅ Usar PermissionChecker
+    from ..permissions import PermissionChecker
+    PermissionChecker.check(
+        current_user.role == "admin" or current_user.id == user_id,
+        "No tienes permisos para ver productos de otros usuarios"
+    )
     
     return user.products
 
@@ -233,8 +218,11 @@ def get_user_details(
 ):
     """Obtiene información detallada de un usuario"""
     # Verificar permisos
-    if current_user.role != "admin" and current_user.id != user_id:
-        raise HTTPException(status_code=403, detail="No tienes permisos para ver esta información")
+    from ..permissions import PermissionChecker
+    PermissionChecker.check(
+        current_user.role == "admin" or current_user.id == user_id,
+        "No tienes permisos para ver esta información"
+    )
     
     user = session.get(User, user_id)
     if not user:
@@ -269,6 +257,7 @@ def get_user_details(
 # 🔄 CAMBIAR ROL DE USUARIO (solo admin)
 # ======================================================
 @router.patch("/{user_id}/role")
+@require_admin  # ✅ Usar decorador
 def change_user_role(
     user_id: int,
     new_role: str,
@@ -276,9 +265,6 @@ def change_user_role(
     current_user: User = Depends(get_current_user)
 ):
     """Cambia el rol de un usuario (solo admin)"""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Solo administradores pueden cambiar roles")
-    
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
