@@ -5,11 +5,32 @@ from datetime import datetime, timedelta
 from ..database import get_session
 from ..models import Product, User, AuditLog
 from .auth_router import get_current_user
+from ..permissions import PermissionChecker, require_admin_or_vendor
+
 
 router = APIRouter(prefix="/products", tags=["products"])
 
 # ======================================================
-# 🟢 Crear producto (solo admin)
+# 🔐 FUNCIONES HELPER PARA PERMISOS
+# ======================================================
+def can_create_product(user: User) -> bool:
+    """Verifica si el usuario puede crear productos"""
+    return user.role in ["admin", "vendor"]
+
+def can_edit_product(user: User, product_owner_id: int) -> bool:
+    """Verifica si el usuario puede editar un producto"""
+    if user.role == "admin":
+        return True
+    if user.role == "vendor" and user.id == product_owner_id:
+        return True
+    return False
+
+def can_delete_product(user: User, product_owner_id: int) -> bool:
+    """Verifica si el usuario puede eliminar un producto"""
+    return can_edit_product(user, product_owner_id)  # Mismas reglas que editar
+
+# ======================================================
+# 🟢 CREAR PRODUCTO (admin y vendedores)
 # ======================================================
 @router.post("/create")
 def create_product(
@@ -17,26 +38,37 @@ def create_product(
     description: str = Form(None),
     price: float = Form(...),
     quantity: int = Form(...),
+    image_path: str = Form(None),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Solo los administradores pueden crear productos")
+    """Crea un nuevo producto (admin y vendedores)"""
+    if not can_create_product(current_user):
+        raise HTTPException(
+            status_code=403, 
+            detail="No tienes permisos para crear productos. Solo administradores y vendedores pueden crear productos."
+        )
 
     product = Product(
         name=name,
         description=description,
         price=price,
         quantity=quantity,
-        owner_id=current_user.id
+        image_path=image_path,
+        owner_id=current_user.id  # El producto pertenece al usuario que lo crea
     )
     session.add(product)
     session.commit()
     session.refresh(product)
-    return {"message": "Producto creado exitosamente", "product": product}
+    
+    return {
+        "message": "Producto creado exitosamente",
+        "product": product,
+        "owner_role": current_user.role
+    }
 
 # ======================================================
-# 🔵 Listar todos los productos (clientes y admin)
+# 🔵 LISTAR TODOS LOS PRODUCTOS (público)
 # ======================================================
 @router.get("/list", response_model=List[Product])
 def list_products(session: Session = Depends(get_session)):
@@ -44,7 +76,7 @@ def list_products(session: Session = Depends(get_session)):
     return products
 
 # ======================================================
-# 🟠 Actualizar producto (solo admin)
+# 🟠 ACTUALIZAR PRODUCTO (admin y dueño vendedor)
 # ======================================================
 @router.put("/{product_id}")
 def update_product(
@@ -53,16 +85,23 @@ def update_product(
     description: str = Form(None),
     price: float = Form(None),
     quantity: int = Form(None),
+    image_path: str = Form(None),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Solo los administradores pueden actualizar productos")
-
+    """Actualiza un producto (admin o vendedor dueño)"""
     product = session.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
+    # Verificar permisos
+    if not can_edit_product(current_user, product.owner_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="No tienes permisos para editar este producto. Solo administradores o el vendedor dueño pueden editarlo."
+        )
+
+    # Actualizar campos
     if name:
         product.name = name
     if description:
@@ -71,14 +110,22 @@ def update_product(
         product.price = price
     if quantity is not None:
         product.quantity = quantity
+    if image_path:
+        product.image_path = image_path
 
     session.add(product)
     session.commit()
     session.refresh(product)
-    return {"message": "Producto actualizado correctamente", "product": product}
+    
+    return {
+        "message": "Producto actualizado correctamente", 
+        "product": product,
+        "updated_by": current_user.username,
+        "user_role": current_user.role
+    }
 
 # ======================================================
-# 🔴 Eliminar producto (solo admin) - CON HISTORIAL
+# 🔴 ELIMINAR PRODUCTO (admin y dueño vendedor) - CON HISTORIAL
 # ======================================================
 @router.delete("/{product_id}")
 def delete_product(
@@ -86,12 +133,17 @@ def delete_product(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Solo los administradores pueden eliminar productos")
-
+    """Elimina un producto (admin o vendedor dueño)"""
     product = session.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
+
+    # Verificar permisos
+    if not can_delete_product(current_user, product.owner_id):
+        raise HTTPException(
+            status_code=403, 
+            detail="No tienes permisos para eliminar este producto. Solo administradores o el vendedor dueño pueden eliminarlo."
+        )
 
     # 🔥 REGISTRAR EN HISTORIAL ANTES de eliminar
     audit_log = AuditLog(
@@ -99,52 +151,43 @@ def delete_product(
         target_id=product_id,
         target_name=product.name,
         performed_by=current_user.username,
-        details=f"Producto '{product.name}' (Precio: ${product.price}, Cantidad: {product.quantity}) eliminado por {current_user.username}"
+        details=f"Producto '{product.name}' (Precio: ${product.price}, Cantidad: {product.quantity}, Dueño: {product.owner_id}) eliminado por {current_user.username} (Rol: {current_user.role})"
     )
     session.add(audit_log)
     
     session.delete(product)
     session.commit()
-    return {"message": f"Producto '{product.name}' eliminado exitosamente"}
+    
+    return {
+        "message": f"Producto '{product.name}' eliminado exitosamente",
+        "deleted_by": current_user.username,
+        "user_role": current_user.role
+    }
 
 # ======================================================
 # 🔍 BÚSQUEDA AVANZADA CON FILTROS MÚLTIPLES
 # ======================================================
 @router.get("/search", response_model=List[Product])
 def search_products(
-    # Filtros de texto
     name: Optional[str] = Query(None, description="Buscar por nombre (búsqueda parcial)"),
     description: Optional[str] = Query(None, description="Buscar en descripción"),
-    
-    # Filtros numéricos
     min_price: Optional[float] = Query(None, ge=0, description="Precio mínimo"),
     max_price: Optional[float] = Query(None, ge=0, description="Precio máximo"),
     min_quantity: Optional[int] = Query(None, ge=0, description="Cantidad mínima"),
     max_quantity: Optional[int] = Query(None, ge=0, description="Cantidad máxima"),
-    
-    # Filtros de existencia
     in_stock: Optional[bool] = Query(None, description="Solo productos con stock"),
-    has_description: Optional[bool] = Query(None, description="Solo productos con descripción"),
-    
-    # Filtros de dueño
     owner_id: Optional[int] = Query(None, description="Productos de un usuario específico"),
-    owner_username: Optional[str] = Query(None, description="Productos por nombre de dueño"),
-    
-    # Filtros de fecha
     created_after: Optional[str] = Query(None, description="Creados después de (YYYY-MM-DD)"),
-    created_before: Optional[str] = Query(None, description="Creados antes de (YYYY-MM-DD)"),
-    
     session: Session = Depends(get_session)
 ):
     """
     🔍 BÚSQUEDA AVANZADA DE PRODUCTOS
     - Búsqueda por texto, precio, cantidad, dueño, fecha
     - Combinación múltiple de filtros
-    - Búsqueda parcial en nombre y descripción
     """
     query = select(Product)
     
-    # 🔤 Filtros de texto (búsqueda parcial)
+    # 🔤 Filtros de texto
     text_filters = []
     if name:
         text_filters.append(Product.name.ilike(f"%{name}%"))
@@ -154,7 +197,7 @@ def search_products(
     if text_filters:
         query = query.where(or_(*text_filters))
     
-    # 🔢 Filtros numéricos (rangos)
+    # 🔢 Filtros numéricos
     numeric_filters = []
     if min_price is not None:
         numeric_filters.append(Product.price >= min_price)
@@ -168,46 +211,21 @@ def search_products(
     if numeric_filters:
         query = query.where(and_(*numeric_filters))
     
-    # 📦 Filtros de existencia
-    if in_stock is not None:
-        if in_stock:
-            query = query.where(Product.quantity > 0)
-        else:
-            query = query.where(Product.quantity == 0)
+    # 📦 Filtro de stock
+    if in_stock is not None and in_stock:
+        query = query.where(Product.quantity > 0)
     
-    if has_description is not None:
-        if has_description:
-            query = query.where(Product.description.isnot(None))
-        else:
-            query = query.where(Product.description.is_(None))
-    
-    # 👤 Filtros de dueño
+    # 👤 Filtro de dueño
     if owner_id:
         query = query.where(Product.owner_id == owner_id)
     
-    if owner_username:
-        # Subconsulta para buscar por nombre de usuario del dueño
-        subquery = select(User.id).where(User.username.ilike(f"%{owner_username}%"))
-        query = query.where(Product.owner_id.in_(subquery))
-    
-    # 📅 Filtros de fecha
-    date_filters = []
+    # 📅 Filtro de fecha
     if created_after:
         try:
             after_date = datetime.fromisoformat(created_after)
-            date_filters.append(Product.created_at >= after_date)
+            query = query.where(Product.created_at >= after_date)
         except ValueError:
             raise HTTPException(status_code=400, detail="Formato de fecha inválido para created_after")
-    
-    if created_before:
-        try:
-            before_date = datetime.fromisoformat(created_before)
-            date_filters.append(Product.created_at <= before_date)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Formato de fecha inválido para created_before")
-    
-    if date_filters:
-        query = query.where(and_(*date_filters))
     
     products = session.exec(query).all()
     
@@ -218,10 +236,8 @@ def search_products(
             "price_range": f"{min_price}-{max_price}" if min_price or max_price else None,
             "quantity_range": f"{min_quantity}-{max_quantity}" if min_quantity or max_quantity else None,
             "in_stock": in_stock,
-            "has_description": has_description,
             "owner_id": owner_id,
-            "owner_username": owner_username,
-            "date_range": f"{created_after} to {created_before}" if created_after or created_before else None
+            "created_after": created_after
         },
         "results_count": len(products),
         "products": products
@@ -243,7 +259,6 @@ def get_all_products(
     if sort_by not in valid_sort_fields:
         sort_by = "name"
     
-    # Construir la consulta con ordenamiento
     order_by_field = getattr(Product, sort_by)
     if order == "desc":
         order_by_field = order_by_field.desc()
@@ -276,25 +291,25 @@ def get_product_owner(
     }
 
 # ======================================================
-# 📈 ESTADÍSTICAS DE PRODUCTOS CON FILTROS
+# 📈 ESTADÍSTICAS DE PRODUCTOS DEL VENDEDOR ACTUAL
 # ======================================================
-@router.get("/stats/summary")
-def get_products_stats(
-    owner_id: Optional[int] = Query(None, description="Filtrar por dueño"),
-    min_price: Optional[float] = Query(None, description="Precio mínimo"),
-    max_price: Optional[float] = Query(None, description="Precio máximo"),
-    session: Session = Depends(get_session)
+@router.get("/my-stats")
+def get_my_products_stats(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
 ):
-    """Estadísticas generales de productos con filtros"""
-    query = select(Product)
+    """Estadísticas de los productos del usuario actual (vendedor o admin)"""
+    if current_user.role not in ["admin", "vendor"]:
+        raise HTTPException(
+            status_code=403, 
+            detail="Solo administradores y vendedores pueden ver estadísticas de productos"
+        )
     
-    # Aplicar filtros si se proporcionan
-    if owner_id:
-        query = query.where(Product.owner_id == owner_id)
-    if min_price is not None:
-        query = query.where(Product.price >= min_price)
-    if max_price is not None:
-        query = query.where(Product.price <= max_price)
+    # Filtrar productos por dueño (a menos que sea admin)
+    if current_user.role == "admin":
+        query = select(Product)
+    else:
+        query = select(Product).where(Product.owner_id == current_user.id)
     
     products = session.exec(query).all()
     
@@ -312,28 +327,66 @@ def get_products_stats(
     low_stock_products = sum(1 for product in products if product.quantity < 10)
     
     # Producto más caro y más barato
-    if products:
-        most_expensive = max(products, key=lambda p: p.price)
-        cheapest = min(products, key=lambda p: p.price)
-    else:
-        most_expensive = cheapest = None
+    most_expensive = max(products, key=lambda p: p.price)
+    cheapest = min(products, key=lambda p: p.price)
     
     return {
+        "user_id": current_user.id,
+        "username": current_user.username,
+        "role": current_user.role,
         "total_products": total_products,
-        "total_value": round(total_value, 2),
+        "total_inventory_value": round(total_value, 2),
         "average_price": round(average_price, 2),
         "low_stock_products": low_stock_products,
-        "products_by_owner": len(set(product.owner_id for product in products if product.owner_id)),
         "price_range": {
-            "max_price": most_expensive.price if most_expensive else 0,
-            "min_price": cheapest.price if cheapest else 0,
-            "most_expensive_product": most_expensive.name if most_expensive else None,
-            "cheapest_product": cheapest.name if cheapest else None
-        }
+            "max_price": most_expensive.price,
+            "min_price": cheapest.price,
+            "most_expensive_product": most_expensive.name,
+            "cheapest_product": cheapest.name
+        },
+        "products_by_category": "Por implementar",  # Futura feature
+        "recently_added": [
+            product.name for product in 
+            sorted(products, key=lambda x: x.created_at, reverse=True)[:5]
+        ]
     }
 
 # ======================================================
-# 🏪 PRODUCTOS DESTACADOS
+# 🏪 MIS PRODUCTOS (para vendedores)
+# ======================================================
+@router.get("/my-products", response_model=List[Product])
+def get_my_products(
+    skip: int = 0,
+    limit: int = 50,
+    in_stock: Optional[bool] = Query(None, description="Filtrar por stock"),
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """Obtiene los productos del usuario actual (vendedor)"""
+    if current_user.role not in ["admin", "vendor"]:
+        raise HTTPException(
+            status_code=403, 
+            detail="Solo administradores y vendedores pueden ver sus productos"
+        )
+    
+    query = select(Product).where(Product.owner_id == current_user.id)
+    
+    if in_stock is not None:
+        if in_stock:
+            query = query.where(Product.quantity > 0)
+        else:
+            query = query.where(Product.quantity == 0)
+    
+    products = session.exec(
+        query.order_by(Product.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    ).all()
+    
+    return products
+
+# ======================================================
+# 🏆 PRODUCTOS DESTACADOS
 # ======================================================
 @router.get("/featured")
 def get_featured_products(
@@ -342,8 +395,6 @@ def get_featured_products(
     session: Session = Depends(get_session)
 ):
     """Obtiene productos destacados (más stock, mejor precio, etc.)"""
-    
-    # Productos con mejor relación precio/cantidad
     query = select(Product).where(Product.quantity > 0).order_by(
         Product.quantity.desc(),
         Product.price.asc()

@@ -6,6 +6,8 @@ from app.algorithms.router import router as algorithms_router
 from .routers import audit  # Agregar este import
 from .routers import cart  # Agregar este import
 from .routers import orders  # Agregar este import
+from .routers import vendors  # Agregar este import
+
 
 
 
@@ -25,6 +27,8 @@ app.include_router(audit.router)  # Agregar esta línea
 app.include_router(algorithms_router)
 app.include_router(cart.router)  # Agregar esta línea
 app.include_router(orders.router)  # Agregar esta línea
+app.include_router(vendors.router)  # Agregar esta línea
+
 
 
 
