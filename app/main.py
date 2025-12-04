@@ -1,4 +1,4 @@
-# app/main.py - VERSIÓN FINAL PARA RENDER
+# app/main.py
 import os
 import sys
 import socket
@@ -13,10 +13,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlmodel import Session, select, text
 
 # ======================================================
-# 🟦 1. VERIFICAR E INSTALAR DEPENDENCIAS FALTANTES
+# 1. VERIFICAR E INSTALAR DEPENDENCIAS FALTANTES
 # ======================================================
 
-# Intenta instalar pymysql si falta (solo en desarrollo)
 if os.getenv("ENVIRONMENT", "development") == "development":
     try:
         import pymysql
@@ -24,14 +23,12 @@ if os.getenv("ENVIRONMENT", "development") == "development":
     except ImportError:
         print("⚠️  pymysql no encontrado en desarrollo")
 else:
-    # En producción, asumimos que está instalado
     import pymysql
 
 # ======================================================
-# 🟦 2. IMPORTAR MÓDULOS CON MANEJO DE ERRORES
+# 2. IMPORTAR MÓDULOS CON MANEJO DE ERRORES
 # ======================================================
 
-# Importar configuración de base de datos
 try:
     from .database import init_db, get_session, test_connection, get_database_info
     DATABASE_AVAILABLE = True
@@ -39,7 +36,6 @@ try:
 except Exception as e:
     print(f"⚠️  No se pudo importar database.py: {e}")
     DATABASE_AVAILABLE = False
-    # Crear funciones dummy
     def init_db(): 
         print("⚠️  init_db dummy - BD no disponible")
     def get_session(): 
@@ -49,7 +45,6 @@ except Exception as e:
     def get_database_info(): 
         return {"connection": "❌ No disponible", "error": "Módulo no cargado"}
 
-# Intentar importar modelos
 try:
     from .models import Product, User, Order, Cart, OrderItem, CartItem, ShippingAddress
     MODELS_AVAILABLE = True
@@ -58,7 +53,6 @@ except Exception as e:
     print(f"⚠️  No se pudo importar models: {e}")
     MODELS_AVAILABLE = False
 
-# Routers principales con manejo de errores
 ROUTERS_LOADED = []
 try:
     from .routers import users, auth_router, products, audit, cart, orders, vendors, addresses
@@ -79,7 +73,6 @@ except Exception as e:
     ROUTERS_AVAILABLE = False
     ROUTERS = {}
 
-# Shipping
 try:
     from .routers import shipping
     SHIPPING_AVAILABLE = True
@@ -89,7 +82,6 @@ except ImportError:
     SHIPPING_AVAILABLE = False
     print("⚠️  Módulo shipping no disponible")
 
-# Algoritmos
 try:
     from app.algorithms.router import router as algorithms_router
     ALGORITHMS_AVAILABLE = True
@@ -100,10 +92,9 @@ except ImportError:
     print("⚠️  Módulo algoritmos no disponible")
 
 # ======================================================
-# 🟦 3. CONFIGURACIÓN BÁSICA
+# 3. CONFIGURACIÓN BÁSICA
 # ======================================================
 
-# Configurar logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -112,13 +103,12 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Tienda Virtual - MySQL Clever Cloud",
-    version="2.0.0",  # Nueva versión
+    version="2.0.0",
     description="Tienda virtual con base de datos MySQL en la nube",
     docs_url="/docs",
     redoc_url="/redoc"
 )
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -127,26 +117,23 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-# Static + Templates
 try:
     templates = Jinja2Templates(directory="app/templates")
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     print("✅ Templates y static configurados")
 except Exception as e:
     print(f"⚠️  No se pudo configurar templates/static: {e}")
-    # Crear templates dummy
     class DummyTemplates:
         def TemplateResponse(self, *args, **kwargs):
             return HTMLResponse("<h1>Error: Templates no disponibles</h1>")
     templates = DummyTemplates()
 
 # ======================================================
-# 🟢 4. HEALTH CHECKS PARA RENDER (DEBE SER LO PRIMERO)
+# 4. HEALTH CHECKS PARA RENDER
 # ======================================================
 
 @app.get("/health", include_in_schema=False)
 async def health_check_immediate():
-    """Health check INMEDIATO que Render usa para verificar"""
     return JSONResponse(
         status_code=200,
         content={
@@ -159,7 +146,6 @@ async def health_check_immediate():
 
 @app.get("/ready", include_in_schema=False)
 async def readiness_check():
-    """Verifica si la app está lista para recibir tráfico"""
     db_connected = False
     if DATABASE_AVAILABLE:
         try:
@@ -180,11 +166,10 @@ async def readiness_check():
     )
 
 # ======================================================
-# 🟢 5. EVENTOS DE INICIO/SHUTDOWN - VERSIÓN RENDER
+# 5. EVENTOS DE INICIO/SHUTDOWN
 # ======================================================
 
 async def initialize_database_background():
-    """Inicializa la base de datos en segundo plano (NO BLOQUEANTE)"""
     try:
         logger.info("🔄 Inicializando base de datos en segundo plano...")
         
@@ -192,10 +177,8 @@ async def initialize_database_background():
             logger.warning("⚠️  Módulo de base de datos no disponible")
             return
         
-        # Pequeña pausa para que Render verifique health check
         await asyncio.sleep(2)
         
-        # Probar conexión a la BD
         logger.info("🔌 Probando conexión a MySQL...")
         
         if test_connection():
@@ -215,40 +198,51 @@ async def initialize_database_background():
 
 @app.on_event("startup")
 async def startup_event():
-    """Evento de inicio - VERSIÓN OPTIMIZADA PARA RENDER"""
-    logger.info("=" * 60)
-    logger.info("🚀 INICIANDO TIENDA VIRTUAL EN RENDER")
     logger.info("=" * 60)
     
-    # Información del sistema
-    port = os.getenv("PORT", "10000")
+    is_render = "RENDER" in os.environ or os.getenv("PORT") not in [None, "8000"]
+    
+    if is_render:
+        logger.info("🚀 INICIANDO TIENDA VIRTUAL EN RENDER")
+    else:
+        logger.info("🚀 INICIANDO TIENDA VIRTUAL (LOCAL)")
+    
+    logger.info("=" * 60)
+    
+    port = os.getenv("PORT", "8000")
     environment = os.getenv("ENVIRONMENT", "development")
-    logger.info(f"🌐 Puerto: {port}")
-    logger.info(f"🌍 Entorno: {environment}")
-    logger.info(f"📁 Directorio: {os.getcwd()}")
-    logger.info(f"🐍 Python: {sys.version[:50]}...")
     
-    # Verificar módulos críticos
-    logger.info("🔍 Verificando módulos...")
+    logger.info(f"🔧 Configuración:")
+    logger.info(f"   Puerto: {port}")
+    logger.info(f"   Entorno: {environment}")
+    logger.info(f"   Render: {'✅ Sí' if is_render else '❌ No'}")
+    logger.info(f"   Host: {'0.0.0.0' if is_render else '127.0.0.1'}")
+    logger.info(f"   Directorio: {os.getcwd()}")
+    logger.info(f"   Python: {sys.version[:50]}...")
+    
+    logger.info("🔍 Módulos cargados:")
     logger.info(f"   Database: {'✅' if DATABASE_AVAILABLE else '❌'}")
     logger.info(f"   Models: {'✅' if MODELS_AVAILABLE else '❌'}")
     
-    # Iniciar BD en segundo plano (NO BLOQUEA EL INICIO)
     asyncio.create_task(initialize_database_background())
     
     logger.info("🎯 Aplicación lista para recibir peticiones")
+    
+    if is_render:
+        logger.info(f"🌐 URL Render: https://tu-app.onrender.com")
+    else:
+        logger.info(f"🌐 URL Local: http://127.0.0.1:{port}")
+    
     logger.info("=" * 60)
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Evento que se ejecuta al cerrar la aplicación"""
     logger.info("🛑 Cerrando Tienda Virtual...")
 
 # ======================================================
-# 🟪 6. INCLUIR ROUTERS API
+# 6. INCLUIR ROUTERS API
 # ======================================================
 
-# Routers principales
 if ROUTERS_AVAILABLE:
     for name, router in ROUTERS.items():
         try:
@@ -260,7 +254,6 @@ if ROUTERS_AVAILABLE:
 else:
     logger.warning("⚠️  No se cargaron routers principales")
 
-# Routers condicionales
 if SHIPPING_AVAILABLE:
     try:
         app.include_router(shipping.router, prefix="/api", tags=["Envíos"])
@@ -278,12 +271,11 @@ if ALGORITHMS_AVAILABLE:
         logger.error(f"❌ Error cargando algoritmos: {e}")
 
 # ======================================================
-# 🟦 7. RUTAS HTML DEL FRONTEND
+# 7. RUTAS HTML DEL FRONTEND
 # ======================================================
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    """Página principal"""
     try:
         db_info = get_database_info() if DATABASE_AVAILABLE else {}
         stats = {
@@ -300,15 +292,14 @@ async def home(request: Request):
             "error": str(e)
         }
     
-    # Determinar si estamos en Render
-    is_render = "render.com" in os.getenv("RENDER_EXTERNAL_URL", "")
+    is_render = "RENDER" in os.environ or os.getenv("PORT") not in [None, "8000"]
     
     return templates.TemplateResponse("index.html", {
         "request": request,
         "db_stats": stats,
         "app_version": "2.0.0",
         "is_render": is_render,
-        "port": os.getenv("PORT", "10000")
+        "port": os.getenv("PORT", "8000")
     })
 
 @app.get("/catalogo", response_class=HTMLResponse)
@@ -365,6 +356,196 @@ async def crear_producto(request: Request):
 
 @app.get("/panel", response_class=HTMLResponse)
 async def panel_vendedor(request: Request):
+    return templates.TemplateResponse("vendors/dashboard.html", {"request": request})
+
+# ======================================================
+# RUTAS DE REDIRECCIÓN
+# ======================================================
+
+@app.get("/auth/login")
+async def redirect_to_acceder():
+    return RedirectResponse(url="/acceder")
+
+@app.get("/login")
+async def redirect_login():
+    return RedirectResponse(url="/acceder")
+
+@app.get("/auth/logout")
+async def redirect_logout():
+    return RedirectResponse(url="/")
+
+# ======================================================
+# 8. ENDPOINTS DE ESTADO / MONITOREO
+# ======================================================
+
+@app.get("/api/status")
+async def api_status():
+    db_connected = False
+    db_info = {}
+    
+    if DATABASE_AVAILABLE:
+        try:
+            db_connected = test_connection()
+            db_info = get_database_info()
+        except:
+            db_connected = False
+            db_info = {"error": "Error obteniendo información"}
+    
+    render_url = os.getenv("RENDER_EXTERNAL_URL", "No disponible")
+    
+    return {
+        "status": "online",
+        "timestamp": datetime.now().isoformat(),
+        "version": "2.0.0",
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "deployment": {
+            "platform": "Render" if "RENDER" in os.environ else "Local",
+            "url": render_url,
+            "port": os.getenv("PORT", "8000")
+        },
+        "database": {
+            "available": DATABASE_AVAILABLE,
+            "connected": db_connected,
+            "name": db_info.get('database', 'No disponible'),
+            "tables": len(db_info.get('tables', [])),
+            "status": db_info.get('connection', 'Desconocido')
+        },
+        "modules": {
+            "database": DATABASE_AVAILABLE,
+            "models": MODELS_AVAILABLE,
+            "routers_loaded": ROUTERS_LOADED,
+            "shipping": SHIPPING_AVAILABLE,
+            "algorithms": ALGORITHMS_AVAILABLE
+        },
+        "system": {
+            "python_version": sys.version[:20],
+            "platform": sys.platform,
+            "host": socket.gethostname()
+        }
+    }
+
+@app.get("/api/db/status")
+def db_status():
+    if not DATABASE_AVAILABLE:
+        return {
+            "database": "MySQL Clever Cloud",
+            "connection": "❌ Módulo no disponible",
+            "database_name": "No disponible",
+            "error": "No se pudo importar database.py",
+            "timestamp": datetime.now().isoformat()
+        }
+    
+    connection_ok = test_connection()
+    info = get_database_info()
+    
+    return {
+        "database": "MySQL Clever Cloud",
+        "connection": "✅ Activa" if connection_ok else "❌ Fallida",
+        "database_name": info.get('database', 'No disponible'),
+        "tables_count": len(info.get('tables', [])),
+        "tables_list": info.get('tables', []),
+        "size_mb": info.get('size_mb', 0),
+        "host": info.get('host', 'No configurado'),
+        "error": info.get('error', None),
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/debug")
+async def debug_endpoint():
+    import pkg_resources
+    
+    packages = {}
+    try:
+        for dist in pkg_resources.working_set:
+            packages[dist.project_name] = dist.version
+    except:
+        packages = {"error": "No se pudieron obtener paquetes"}
+    
+    files_exist = {
+        "app/": os.path.exists("app"),
+        "app/database.py": os.path.exists("app/database.py"),
+        "app/models.py": os.path.exists("app/models.py"),
+        "requirements.txt": os.path.exists("requirements.txt"),
+    }
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "system": {
+            "cwd": os.getcwd(),
+            "files": os.listdir(".")[:10],
+            "files_exist": files_exist
+        },
+        "environment": {
+            "PORT": os.getenv("PORT", "No configurado"),
+            "ENVIRONMENT": os.getenv("ENVIRONMENT", "development"),
+            "MYSQL_HOST": os.getenv("MYSQL_HOST", "No configurado"),
+            "RENDER": "RENDER" in os.environ
+        },
+        "packages": {k: v for k, v in list(packages.items())[:10]}
+    }
+
+# ======================================================
+# 9. MANEJADOR DE ERRORES GLOBAL
+# ======================================================
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Error en {request.url.path}: {str(exc)}")
+    
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": "Error interno del servidor",
+            "message": str(exc) if os.getenv("ENVIRONMENT") == "development" else "Contacte al administrador",
+            "path": request.url.path,
+            "timestamp": datetime.now().isoformat()
+        }
+    )
+
+# ======================================================
+# 10. EJECUCIÓN PARA DESARROLLO LOCAL
+# ======================================================
+
+def run_local_development():
+    import uvicorn
+    
+    print("=" * 60)
+    print("🚀 TIENDA VIRTUAL - MODO DESARROLLO LOCAL")
+    print("=" * 60)
+    print("📌 Para desarrollo local:")
+    print("   python app/main.py")
+    print("")
+    print("📌 Para Render:")
+    print("   python render_start.py")
+    print("   O Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT")
+    print("=" * 60)
+    
+    uvicorn.run(
+        "app.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
+if __name__ == "__main__":
+    if "RENDER" in os.environ or "PORT" in os.environ:
+        print("⚠️  Detectado entorno tipo Render")
+        print("💡 Usa: python render_start.py  o")
+        print("   Configura Start Command en Render")
+        
+        port = int(os.getenv("PORT", 10000))
+        
+        import uvicorn
+        uvicorn.run(
+            "app.main:app",
+            host="0.0.0.0",
+            port=port,
+            reload=False,
+            log_level="info"
+        )
+    else:
+        run_local_development()async def panel_vendedor(request: Request):
     return templates.TemplateResponse("vendors/dashboard.html", {"request": request})
 
 # ======================================================
