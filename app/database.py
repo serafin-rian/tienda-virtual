@@ -15,11 +15,11 @@ load_dotenv()
 
 # VERIFICA ESTOS DATOS EXACTAMENTE COMO ESTÁN EN CLEVER CLOUD
 MYSQL_CONFIG = {
-    "host": "b9maju0nm8eaq2enhzhd-mysql.services.clever-cloud.com",
+    "host": "bogydrre62bcscxkvuak-mysql.services.clever-cloud.com",
     "port": 3306,
-    "database": "b9maju0nm8eaq2enhzhd",
-    "username": "uwfhtgrqz7c8pjdg",
-    "password": "3fAP9h7uGC22092N02mm",
+    "database": "bogydrre62bcscxkvuak",
+    "username": "uv1y4r6z0jgtpsny",
+    "password": "W20lIhrKvAiylQlAlonV",
     "charset": "utf8mb4"
 }
 
