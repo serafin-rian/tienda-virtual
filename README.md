@@ -26,56 +26,60 @@ Características Principales:
 
 
 Estructura del Proyecto
-app/
-├── main.py                    # Punto de entrada principal
-├── database.py               # Configuración de base de datos
-├── auth.py                   # Funciones de autenticación
-├── models.py                 # Modelos SQLModel
-├── permissions.py            # Sistema de permisos por roles
-├── utils/
-│   └── images.py            # Utilidades para procesar imágenes
-│
-├── algorithms/              # Implementaciones de algoritmos
-│   ├── router.py
-│   ├── sorting.py          # QuickSort y MergeSort
-│   └── greedy.py           # Algoritmo voraz
-│
-├── routers/                 # Endpoints de la API
-│   ├── auth_router.py      # Registro de usuarios
-│   ├── users.py           # Gestión de usuarios
-│   ├── products.py        # Productos CRUD
-│   ├── cart.py           # Carrito de compras
-│   ├── orders.py         # Gestión de pedidos
-│   ├── vendors.py        # Panel de vendedor
-│   ├── addresses.py      # Direcciones de envío
-│   ├── shipping.py       # Sistema de envíos
-│   ├── audit.py         # Historial de auditoría
-│   └── shipping_service.py # Lógica de negocio envíos
-│
-├── templates/              # Plantillas HTML
-│   ├── base.html          # Layout base
-│   ├── index.html         # Página principal
-│   ├── login_simple.html  # Página de acceso
-│   ├── register.html      # Registro de usuarios
-│   ├── usuarios.html      # Lista de usuarios
-│   ├── profile.html       # Perfil de usuario
-│   ├── algorithms.html    # Prueba de algoritmos
-│   │
-│   ├── products/          # Plantillas de productos
-│   │   ├── list.html      # Catálogo
-│   │   └── create.html    # Crear producto
-│   │
-│   ├── cart.html          # Carrito de compras
-│   ├── orders.html        # Pedidos del usuario
-│   ├── shipping/          # Envíos
-│   │   └── track.html     # Seguimiento
-│   └── vendors/           # Panel vendedor
-│       └── dashboard.html
-│
-└── static/                # Archivos estáticos
-    ├── js/
-    │   └── auth.js        # Gestión de autenticación (simplificado)
-    └── uploads/          # Imágenes subidas
+```markdown
+# Estructura del Proyecto
+
+## Raíz (`app/`)
+
+- `main.py` – Punto de entrada principal
+- `database.py` – Configuración de base de datos
+- `auth.py` – Funciones de autenticación
+- `models.py` – Modelos SQLModel
+- `permissions.py` – Sistema de permisos por roles
+
+## Directorio `utils/`
+- `images.py` – Utilidades para procesar imágenes
+- `algoritmos/` – Implementaciones de algoritmos
+  - `router.py`
+  - `sorting.py` – QuickSort y MergeSort
+  - `greedy.py` – Algoritmo voraz
+
+## Directorio `routers/` (Endpoints de la API)
+- `auth_router.py` – Registro de usuarios
+- `users.py` – Gestión de usuarios
+- `products.py` – Productos CRUD
+- `cart.py` – Carrito de compras
+- `orders.py` – Gestión de pedidos
+- `vendors.py` – Panel de vendedor
+- `addresses.py` – Direcciones de envío
+- `shipping.py` – Sistema de envíos
+- `audit.py` – Historial de auditoría
+- `shipping_service.py` – Lógica de negocio envíos
+
+## Directorio `templates/` (Plantillas HTML)
+- `base.html` – Layout base
+- `index.html` – Página principal
+- `login_simple.html` – Página de acceso
+- `register.html` – Registro de usuarios
+- `usuarios.html` – Lista de usuarios
+- `profile.html` – Perfil de usuario
+- `algorithms.html` – Prueba de algoritmos
+
+### Subdirectorios de plantillas:
+- `products/`
+  - `list.html` – Catálogo
+  - `create.html` – Crear producto
+  - `cart.html` – Carrito de compras
+- `shipping/`
+  - `track.html` – Seguimiento
+- `vendors/`
+  - `dashboard.html`
+
+## Directorio `static/`
+- `js/auth.js` – Gestión de autenticación (simplificado)
+
+## Directorio `uploads/`
+- Imágenes subidas
 
 
 
