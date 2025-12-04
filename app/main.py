@@ -57,23 +57,22 @@ os.makedirs("app/static/js", exist_ok=True)
 # ======================================================
 @app.on_event("startup")
 def startup():
-    # Inicializar base de datos
+    # Inicializar base de datos (crea tablas en MySQL)
     init_db()
-    
-    # Obtener sesión usando el engine directamente
-    from sqlmodel import create_engine, Session as DBSession
-    engine = create_engine("sqlite:///./tienda.db")
-    
-    with DBSession(engine) as session:
+
+    # ← AQUÍ ESTABA EL ERROR: usabas SQLite
+    # Ahora usamos el mismo engine que creaste en database.py (MySQL)
+    from .database import engine, get_session
+    from sqlmodel import Session, select
+
+    with Session(engine) as session:
         # Verificar si existe algún usuario
-        users_count = session.exec(select(User)).all()
-        
-        if not users_count:
-            print("📝 Creando usuario administrador por defecto...")
-            
+        users_count = len(session.exec(select(User)).all())
+
+        if users_count == 0:
+            print("Creando usuario administrador por defecto...")
             from .auth import hash_password
-            
-            # Crear usuario admin
+
             admin_user = User(
                 username="admin",
                 hashed_password=hash_password("admin123"),
@@ -81,80 +80,31 @@ def startup():
                 is_superuser=True
             )
             session.add(admin_user)
-            
-            # Crear usuario vendedor
-            vendor_user = User(
-                username="vendedor1",
-                hashed_password=hash_password("vendedor123"),
-                role="vendor"
-            )
-            session.add(vendor_user)
-            
-            # Crear usuario cliente
-            customer_user = User(
-                username="cliente1",
-                hashed_password=hash_password("cliente123"),
-                role="customer"
-            )
-            session.add(customer_user)
-            
             session.commit()
-            print("✅ Usuarios por defecto creados")
-        
-        # Verificar si existen productos
-        products_count = session.exec(select(Product)).all()
-        
-        if not products_count:
-            print("📝 Creando productos de ejemplo...")
-            
-            # Obtener el usuario admin para asignar productos
+            print("Usuario admin creado")
+
+        # Verificar productos
+        products_count = len(session.exec(select(Product)).all())
+
+        if products_count == 0:
+            print("Creando productos de ejemplo...")
             admin_user = session.exec(select(User).where(User.username == "admin")).first()
-            vendor_user = session.exec(select(User).where(User.username == "vendedor1")).first()
-            
             if admin_user:
-                # Producto 1
                 product1 = Product(
-                    name="Laptop Gaming",
-                    description="Laptop potente para gaming y trabajo",
-                    price=1299.99,
-                    quantity=10,
-                    weight_kg=2.5,
-                    dimensions_cm="35x25x2",
+                    name="Laptop Gaming Pro",
+                    description="Potente laptop para gaming y edición",
+                    price=1499.99,
+                    quantity=5,
+                    weight_kg=2.8,
+                    dimensions_cm="38x26x3",
                     requires_shipping=True,
                     owner_id=admin_user.id
                 )
                 session.add(product1)
-            
-            if vendor_user:
-                # Producto 2
-                product2 = Product(
-                    name="Smartphone Android",
-                    description="Teléfono inteligente de última generación",
-                    price=499.99,
-                    quantity=25,
-                    weight_kg=0.2,
-                    dimensions_cm="15x7x1",
-                    requires_shipping=True,
-                    owner_id=vendor_user.id
-                )
-                session.add(product2)
-                
-                # Producto 3
-                product3 = Product(
-                    name="Auriculares Bluetooth",
-                    description="Auriculares inalámbricos con cancelación de ruido",
-                    price=89.99,
-                    quantity=50,
-                    weight_kg=0.3,
-                    requires_shipping=True,
-                    owner_id=vendor_user.id
-                )
-                session.add(product3)
-            
-            session.commit()
-            print("✅ Productos de ejemplo creados")
-    
-    print("📦 Base de datos lista con datos iniciales.")
+                session.commit()
+            print("Productos de ejemplo creados")
+
+    print("Base de datos lista con datos iniciales.")
 
 # ======================================================
 # 🟪 INCLUIR ROUTERS API /api/...
