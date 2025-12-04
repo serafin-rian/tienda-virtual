@@ -450,8 +450,8 @@ if __name__ == "__main__":
     # Para desarrollo local, usa host 0.0.0.0
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 no 127.0.0.1
-        port=8000,
-        reload=True,
+        host="0.0.0.0",  # IMPORTANTE: 0.0.0.0 para Render
+        port=port,        # Usar variable PORT
+        reload=False,     # False en producción
         log_level="info"
     )
