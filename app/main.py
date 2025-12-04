@@ -1,114 +1,39 @@
-# app/main.py
-import os
-import sys
-import socket
-import asyncio
-from datetime import datetime
-import logging
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
-from sqlmodel import Session, select, text
+from fastapi.responses import HTMLResponse, RedirectResponse
+import os
+from datetime import datetime
 
-# ======================================================
-# 1. VERIFICAR E INSTALAR DEPENDENCIAS FALTANTES
-# ======================================================
+from .database import init_db, get_session
+from sqlmodel import select, Session
 
-if os.getenv("ENVIRONMENT", "development") == "development":
-    try:
-        import pymysql
-        print("✅ pymysql disponible")
-    except ImportError:
-        print("⚠️  pymysql no encontrado en desarrollo")
-else:
-    import pymysql
+# Modelos
+from .models import Product, User
 
-# ======================================================
-# 2. IMPORTAR MÓDULOS CON MANEJO DE ERRORES
-# ======================================================
+# Routers principales
+from .routers import users, auth_router, products, audit, cart, orders, vendors, addresses
 
-try:
-    from .database import init_db, get_session, test_connection, get_database_info
-    DATABASE_AVAILABLE = True
-    print("✅ Módulo database disponible")
-except Exception as e:
-    print(f"⚠️  No se pudo importar database.py: {e}")
-    DATABASE_AVAILABLE = False
-    def init_db(): 
-        print("⚠️  init_db dummy - BD no disponible")
-    def get_session(): 
-        yield None
-    def test_connection(): 
-        return False
-    def get_database_info(): 
-        return {"connection": "❌ No disponible", "error": "Módulo no cargado"}
-
-try:
-    from .models import Product, User, Order, Cart, OrderItem, CartItem, ShippingAddress
-    MODELS_AVAILABLE = True
-    print("✅ Modelos disponibles")
-except Exception as e:
-    print(f"⚠️  No se pudo importar models: {e}")
-    MODELS_AVAILABLE = False
-
-ROUTERS_LOADED = []
-try:
-    from .routers import users, auth_router, products, audit, cart, orders, vendors, addresses
-    ROUTERS = {
-        'auth': auth_router,
-        'users': users,
-        'products': products,
-        'cart': cart,
-        'orders': orders,
-        'vendors': vendors,
-        'addresses': addresses,
-        'audit': audit
-    }
-    ROUTERS_AVAILABLE = True
-    print("✅ Routers principales disponibles")
-except Exception as e:
-    print(f"⚠️  No se pudo importar routers principales: {e}")
-    ROUTERS_AVAILABLE = False
-    ROUTERS = {}
-
+# Shipping
 try:
     from .routers import shipping
-    SHIPPING_AVAILABLE = True
-    print("✅ Módulo shipping disponible")
 except ImportError:
     shipping = None
-    SHIPPING_AVAILABLE = False
-    print("⚠️  Módulo shipping no disponible")
 
+# Algoritmos
 try:
     from app.algorithms.router import router as algorithms_router
-    ALGORITHMS_AVAILABLE = True
-    print("✅ Módulo algoritmos disponible")
 except ImportError:
     algorithms_router = None
-    ALGORITHMS_AVAILABLE = False
-    print("⚠️  Módulo algoritmos no disponible")
 
 # ======================================================
-# 3. CONFIGURACIÓN BÁSICA
+# 🟦 CREACIÓN DE APP
 # ======================================================
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Tienda Virtual", version="1.0.0")
 
-app = FastAPI(
-    title="Tienda Virtual - MySQL Clever Cloud",
-    version="2.0.0",
-    description="Tienda virtual con base de datos MySQL en la nube",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -117,190 +42,148 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-try:
-    templates = Jinja2Templates(directory="app/templates")
-    app.mount("/static", StaticFiles(directory="app/static"), name="static")
-    print("✅ Templates y static configurados")
-except Exception as e:
-    print(f"⚠️  No se pudo configurar templates/static: {e}")
-    class DummyTemplates:
-        def TemplateResponse(self, *args, **kwargs):
-            return HTMLResponse("<h1>Error: Templates no disponibles</h1>")
-    templates = DummyTemplates()
+# Static + Templates
+templates = Jinja2Templates(directory="app/templates")
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Crear carpetas necesarias
+os.makedirs("app/static/uploads/products", exist_ok=True)
+os.makedirs("app/static/uploads/users", exist_ok=True)
+os.makedirs("app/templates", exist_ok=True)
+os.makedirs("app/static/js", exist_ok=True)
 
 # ======================================================
-# 4. HEALTH CHECKS PARA RENDER
+# 🟩 INICIALIZACIÓN BD Y DATOS DE PRUEBA
 # ======================================================
-
-@app.get("/health", include_in_schema=False)
-async def health_check_immediate():
-    return JSONResponse(
-        status_code=200,
-        content={
-            "status": "ok",
-            "service": "tienda-virtual",
-            "timestamp": datetime.now().isoformat(),
-            "version": "2.0.0"
-        }
-    )
-
-@app.get("/ready", include_in_schema=False)
-async def readiness_check():
-    db_connected = False
-    if DATABASE_AVAILABLE:
-        try:
-            db_connected = test_connection()
-        except:
-            db_connected = False
-    
-    status = "ready" if len(ROUTERS_LOADED) > 0 else "degraded"
-    
-    return JSONResponse(
-        status_code=200 if status == "ready" else 503,
-        content={
-            "status": status,
-            "database": "connected" if db_connected else "disconnected",
-            "routers_loaded": len(ROUTERS_LOADED),
-            "timestamp": datetime.now().isoformat()
-        }
-    )
-
-# ======================================================
-# 5. EVENTOS DE INICIO/SHUTDOWN
-# ======================================================
-
-async def initialize_database_background():
-    try:
-        logger.info("🔄 Inicializando base de datos en segundo plano...")
-        
-        if not DATABASE_AVAILABLE:
-            logger.warning("⚠️  Módulo de base de datos no disponible")
-            return
-        
-        await asyncio.sleep(2)
-        
-        logger.info("🔌 Probando conexión a MySQL...")
-        
-        if test_connection():
-            logger.info("✅ Conexión a MySQL exitosa")
-            try:
-                init_db()
-                info = get_database_info()
-                logger.info(f"📊 Base de datos: {info.get('database', 'Desconocida')}")
-                logger.info(f"📊 Tablas: {len(info.get('tables', []))}")
-            except Exception as e:
-                logger.warning(f"⚠️  Error inicializando tablas: {e}")
-        else:
-            logger.warning("⚠️  No se pudo conectar a MySQL. La app funcionará en modo limitado.")
-            
-    except Exception as e:
-        logger.error(f"❌ Error en inicialización de BD: {e}")
-
 @app.on_event("startup")
-async def startup_event():
-    logger.info("=" * 60)
+def startup():
+    # Inicializar base de datos
+    init_db()
     
-    is_render = "RENDER" in os.environ or os.getenv("PORT") not in [None, "8000"]
+    # Obtener sesión usando el engine directamente
+    from sqlmodel import create_engine, Session as DBSession
+    engine = create_engine("sqlite:///./tienda.db")
     
-    if is_render:
-        logger.info("🚀 INICIANDO TIENDA VIRTUAL EN RENDER")
-    else:
-        logger.info("🚀 INICIANDO TIENDA VIRTUAL (LOCAL)")
+    with DBSession(engine) as session:
+        # Verificar si existe algún usuario
+        users_count = session.exec(select(User)).all()
+        
+        if not users_count:
+            print("📝 Creando usuario administrador por defecto...")
+            
+            from .auth import hash_password
+            
+            # Crear usuario admin
+            admin_user = User(
+                username="admin",
+                hashed_password=hash_password("admin123"),
+                role="admin",
+                is_superuser=True
+            )
+            session.add(admin_user)
+            
+            # Crear usuario vendedor
+            vendor_user = User(
+                username="vendedor1",
+                hashed_password=hash_password("vendedor123"),
+                role="vendor"
+            )
+            session.add(vendor_user)
+            
+            # Crear usuario cliente
+            customer_user = User(
+                username="cliente1",
+                hashed_password=hash_password("cliente123"),
+                role="customer"
+            )
+            session.add(customer_user)
+            
+            session.commit()
+            print("✅ Usuarios por defecto creados")
+        
+        # Verificar si existen productos
+        products_count = session.exec(select(Product)).all()
+        
+        if not products_count:
+            print("📝 Creando productos de ejemplo...")
+            
+            # Obtener el usuario admin para asignar productos
+            admin_user = session.exec(select(User).where(User.username == "admin")).first()
+            vendor_user = session.exec(select(User).where(User.username == "vendedor1")).first()
+            
+            if admin_user:
+                # Producto 1
+                product1 = Product(
+                    name="Laptop Gaming",
+                    description="Laptop potente para gaming y trabajo",
+                    price=1299.99,
+                    quantity=10,
+                    weight_kg=2.5,
+                    dimensions_cm="35x25x2",
+                    requires_shipping=True,
+                    owner_id=admin_user.id
+                )
+                session.add(product1)
+            
+            if vendor_user:
+                # Producto 2
+                product2 = Product(
+                    name="Smartphone Android",
+                    description="Teléfono inteligente de última generación",
+                    price=499.99,
+                    quantity=25,
+                    weight_kg=0.2,
+                    dimensions_cm="15x7x1",
+                    requires_shipping=True,
+                    owner_id=vendor_user.id
+                )
+                session.add(product2)
+                
+                # Producto 3
+                product3 = Product(
+                    name="Auriculares Bluetooth",
+                    description="Auriculares inalámbricos con cancelación de ruido",
+                    price=89.99,
+                    quantity=50,
+                    weight_kg=0.3,
+                    requires_shipping=True,
+                    owner_id=vendor_user.id
+                )
+                session.add(product3)
+            
+            session.commit()
+            print("✅ Productos de ejemplo creados")
     
-    logger.info("=" * 60)
-    
-    port = os.getenv("PORT", "8000")
-    environment = os.getenv("ENVIRONMENT", "development")
-    
-    logger.info(f"🔧 Configuración:")
-    logger.info(f"   Puerto: {port}")
-    logger.info(f"   Entorno: {environment}")
-    logger.info(f"   Render: {'✅ Sí' if is_render else '❌ No'}")
-    logger.info(f"   Host: {'0.0.0.0' if is_render else '127.0.0.1'}")
-    logger.info(f"   Directorio: {os.getcwd()}")
-    logger.info(f"   Python: {sys.version[:50]}...")
-    
-    logger.info("🔍 Módulos cargados:")
-    logger.info(f"   Database: {'✅' if DATABASE_AVAILABLE else '❌'}")
-    logger.info(f"   Models: {'✅' if MODELS_AVAILABLE else '❌'}")
-    
-    asyncio.create_task(initialize_database_background())
-    
-    logger.info("🎯 Aplicación lista para recibir peticiones")
-    
-    if is_render:
-        logger.info(f"🌐 URL Render: https://tu-app.onrender.com")
-    else:
-        logger.info(f"🌐 URL Local: http://127.0.0.1:{port}")
-    
-    logger.info("=" * 60)
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    logger.info("🛑 Cerrando Tienda Virtual...")
+    print("📦 Base de datos lista con datos iniciales.")
 
 # ======================================================
-# 6. INCLUIR ROUTERS API
+# 🟪 INCLUIR ROUTERS API /api/...
 # ======================================================
 
-if ROUTERS_AVAILABLE:
-    for name, router in ROUTERS.items():
-        try:
-            app.include_router(router.router, prefix="/api", tags=[name.capitalize()])
-            ROUTERS_LOADED.append(name)
-            logger.info(f"✅ Router {name} cargado")
-        except Exception as e:
-            logger.error(f"❌ Error cargando router {name}: {e}")
-else:
-    logger.warning("⚠️  No se cargaron routers principales")
+# NOTA: auth_router se mantiene pero solo para crear usuarios
+app.include_router(auth_router.router, prefix="/api")
+app.include_router(users.router, prefix="/api")
+app.include_router(products.router, prefix="/api")
+app.include_router(cart.router, prefix="/api")
+app.include_router(orders.router, prefix="/api")
+app.include_router(vendors.router, prefix="/api")
+app.include_router(addresses.router, prefix="/api")
+app.include_router(audit.router, prefix="/api")
 
-if SHIPPING_AVAILABLE:
-    try:
-        app.include_router(shipping.router, prefix="/api", tags=["Envíos"])
-        ROUTERS_LOADED.append("shipping")
-        logger.info("✅ Módulo de envíos cargado")
-    except Exception as e:
-        logger.error(f"❌ Error cargando shipping: {e}")
+if shipping:
+    app.include_router(shipping.router, prefix="/api")
 
-if ALGORITHMS_AVAILABLE:
-    try:
-        app.include_router(algorithms_router, prefix="/api", tags=["Algoritmos"])
-        ROUTERS_LOADED.append("algorithms")
-        logger.info("✅ Módulo de algoritmos cargado")
-    except Exception as e:
-        logger.error(f"❌ Error cargando algoritmos: {e}")
+if algorithms_router:
+    app.include_router(algorithms_router, prefix="/api")
 
 # ======================================================
-# 7. RUTAS HTML DEL FRONTEND
+# 🟦 RUTAS HTML DEL FRONTEND
 # ======================================================
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
-    try:
-        db_info = get_database_info() if DATABASE_AVAILABLE else {}
-        stats = {
-            "tables_count": len(db_info.get('tables', [])) if db_info.get('tables') else 0,
-            "connection_status": db_info.get('connection', '❌ No disponible'),
-            "database_name": db_info.get('database', 'MySQL Clever Cloud'),
-            "error": db_info.get('error', None)
-        }
-    except Exception as e:
-        stats = {
-            "tables_count": 0,
-            "connection_status": f"❌ Error: {str(e)[:50]}...",
-            "database_name": "No disponible",
-            "error": str(e)
-        }
-    
-    is_render = "RENDER" in os.environ or os.getenv("PORT") not in [None, "8000"]
-    
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "db_stats": stats,
-        "app_version": "2.0.0",
-        "is_render": is_render,
-        "port": os.getenv("PORT", "8000")
-    })
+    """Página principal usando templates"""
+    return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/catalogo", response_class=HTMLResponse)
 async def catalogo(request: Request):
@@ -316,236 +199,41 @@ async def pedidos(request: Request):
 
 @app.get("/seguimiento", response_class=HTMLResponse)
 async def seguimiento(request: Request):
-    if SHIPPING_AVAILABLE:
-        return templates.TemplateResponse("shipping/track.html", {"request": request})
-    else:
-        return templates.TemplateResponse("error.html", {
-            "request": request,
-            "error": "Módulo de envíos no disponible"
-        })
+    return templates.TemplateResponse("shipping/track.html", {"request": request})
 
 @app.get("/algoritmos", response_class=HTMLResponse)
 async def algoritmos(request: Request):
-    if ALGORITHMS_AVAILABLE:
-        return templates.TemplateResponse("algorithms.html", {"request": request})
-    else:
-        return templates.TemplateResponse("error.html", {
-            "request": request,
-            "error": "Módulo de algoritmos no disponible"
-        })
+    """Página para probar algoritmos"""
+    return templates.TemplateResponse("algorithms.html", {"request": request})
 
 @app.get("/perfil", response_class=HTMLResponse)
 async def perfil(request: Request):
+    """Página de perfil de usuario"""
     return templates.TemplateResponse("profile.html", {"request": request})
 
 @app.get("/registro", response_class=HTMLResponse)
 async def registro(request: Request):
+    """Página para crear nuevos usuarios"""
     return templates.TemplateResponse("register.html", {"request": request})
 
 @app.get("/usuarios", response_class=HTMLResponse)
 async def usuarios(request: Request):
+    """Página para ver todos los usuarios"""
     return templates.TemplateResponse("usuarios.html", {"request": request})
 
 @app.get("/acceder", response_class=HTMLResponse)
 async def acceder(request: Request):
+    """Página de acceso (simbólica)"""
     return templates.TemplateResponse("login_simple.html", {"request": request})
 
 @app.get("/crear-producto", response_class=HTMLResponse)
 async def crear_producto(request: Request):
+    """Página para crear nuevos productos"""
     return templates.TemplateResponse("products/create.html", {"request": request})
 
 @app.get("/panel", response_class=HTMLResponse)
 async def panel_vendedor(request: Request):
-    return templates.TemplateResponse("vendors/dashboard.html", {"request": request})
-
-# ======================================================
-# RUTAS DE REDIRECCIÓN
-# ======================================================
-
-@app.get("/auth/login")
-async def redirect_to_acceder():
-    return RedirectResponse(url="/acceder")
-
-@app.get("/login")
-async def redirect_login():
-    return RedirectResponse(url="/acceder")
-
-@app.get("/auth/logout")
-async def redirect_logout():
-    return RedirectResponse(url="/")
-
-# ======================================================
-# 8. ENDPOINTS DE ESTADO / MONITOREO
-# ======================================================
-
-@app.get("/api/status")
-async def api_status():
-    db_connected = False
-    db_info = {}
-    
-    if DATABASE_AVAILABLE:
-        try:
-            db_connected = test_connection()
-            db_info = get_database_info()
-        except:
-            db_connected = False
-            db_info = {"error": "Error obteniendo información"}
-    
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "No disponible")
-    
-    return {
-        "status": "online",
-        "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "deployment": {
-            "platform": "Render" if "RENDER" in os.environ else "Local",
-            "url": render_url,
-            "port": os.getenv("PORT", "8000")
-        },
-        "database": {
-            "available": DATABASE_AVAILABLE,
-            "connected": db_connected,
-            "name": db_info.get('database', 'No disponible'),
-            "tables": len(db_info.get('tables', [])),
-            "status": db_info.get('connection', 'Desconocido')
-        },
-        "modules": {
-            "database": DATABASE_AVAILABLE,
-            "models": MODELS_AVAILABLE,
-            "routers_loaded": ROUTERS_LOADED,
-            "shipping": SHIPPING_AVAILABLE,
-            "algorithms": ALGORITHMS_AVAILABLE
-        },
-        "system": {
-            "python_version": sys.version[:20],
-            "platform": sys.platform,
-            "host": socket.gethostname()
-        }
-    }
-
-@app.get("/api/db/status")
-def db_status():
-    if not DATABASE_AVAILABLE:
-        return {
-            "database": "MySQL Clever Cloud",
-            "connection": "❌ Módulo no disponible",
-            "database_name": "No disponible",
-            "error": "No se pudo importar database.py",
-            "timestamp": datetime.now().isoformat()
-        }
-    
-    connection_ok = test_connection()
-    info = get_database_info()
-    
-    return {
-        "database": "MySQL Clever Cloud",
-        "connection": "✅ Activa" if connection_ok else "❌ Fallida",
-        "database_name": info.get('database', 'No disponible'),
-        "tables_count": len(info.get('tables', [])),
-        "tables_list": info.get('tables', []),
-        "size_mb": info.get('size_mb', 0),
-        "host": info.get('host', 'No configurado'),
-        "error": info.get('error', None),
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/api/debug")
-async def debug_endpoint():
-    import pkg_resources
-    
-    packages = {}
-    try:
-        for dist in pkg_resources.working_set:
-            packages[dist.project_name] = dist.version
-    except:
-        packages = {"error": "No se pudieron obtener paquetes"}
-    
-    files_exist = {
-        "app/": os.path.exists("app"),
-        "app/database.py": os.path.exists("app/database.py"),
-        "app/models.py": os.path.exists("app/models.py"),
-        "requirements.txt": os.path.exists("requirements.txt"),
-    }
-    
-    return {
-        "timestamp": datetime.now().isoformat(),
-        "system": {
-            "cwd": os.getcwd(),
-            "files": os.listdir(".")[:10],
-            "files_exist": files_exist
-        },
-        "environment": {
-            "PORT": os.getenv("PORT", "No configurado"),
-            "ENVIRONMENT": os.getenv("ENVIRONMENT", "development"),
-            "MYSQL_HOST": os.getenv("MYSQL_HOST", "No configurado"),
-            "RENDER": "RENDER" in os.environ
-        },
-        "packages": {k: v for k, v in list(packages.items())[:10]}
-    }
-
-# ======================================================
-# 9. MANEJADOR DE ERRORES GLOBAL
-# ======================================================
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Error en {request.url.path}: {str(exc)}")
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Error interno del servidor",
-            "message": str(exc) if os.getenv("ENVIRONMENT") == "development" else "Contacte al administrador",
-            "path": request.url.path,
-            "timestamp": datetime.now().isoformat()
-        }
-    )
-
-# ======================================================
-# 10. EJECUCIÓN PARA DESARROLLO LOCAL
-# ======================================================
-
-def run_local_development():
-    import uvicorn
-    
-    print("=" * 60)
-    print("🚀 TIENDA VIRTUAL - MODO DESARROLLO LOCAL")
-    print("=" * 60)
-    print("📌 Para desarrollo local:")
-    print("   python app/main.py")
-    print("")
-    print("📌 Para Render:")
-    print("   python render_start.py")
-    print("   O Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT")
-    print("=" * 60)
-    
-    uvicorn.run(
-        "app.main:app",
-        host="127.0.0.1",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
-
-if __name__ == "__main__":
-    if "RENDER" in os.environ or "PORT" in os.environ:
-        print("⚠️  Detectado entorno tipo Render")
-        print("💡 Usa: python render_start.py  o")
-        print("   Configura Start Command en Render")
-        
-        port = int(os.getenv("PORT", 10000))
-        
-        import uvicorn
-        uvicorn.run(
-            "app.main:app",
-            host="0.0.0.0",
-            port=port,
-            reload=False,
-            log_level="info"
-        )
-    else:
-        run_local_development()async def panel_vendedor(request: Request):
+    """Panel de control para vendedores"""
     return templates.TemplateResponse("vendors/dashboard.html", {"request": request})
 
 # ======================================================
@@ -554,172 +242,52 @@ if __name__ == "__main__":
 
 @app.get("/auth/login")
 async def redirect_to_acceder():
+    """Redirige /auth/login a /acceder"""
     return RedirectResponse(url="/acceder")
 
 @app.get("/login")
 async def redirect_login():
+    """Redirige /login a /acceder"""
     return RedirectResponse(url="/acceder")
 
 @app.get("/auth/logout")
 async def redirect_logout():
+    """Redirige /auth/logout a / (home)"""
     return RedirectResponse(url="/")
 
 # ======================================================
-# 🟩 8. ENDPOINTS DE ESTADO / MONITOREO
+# 🟩 ENDPOINTS DE ESTADO / TEST
 # ======================================================
 
 @app.get("/api/status")
-async def api_status():
-    """Endpoint de estado del sistema"""
-    db_connected = False
-    db_info = {}
-    
-    if DATABASE_AVAILABLE:
-        try:
-            db_connected = test_connection()
-            db_info = get_database_info()
-        except:
-            db_connected = False
-            db_info = {"error": "Error obteniendo información"}
-    
-    # Obtener URL de Render si existe
-    render_url = os.getenv("RENDER_EXTERNAL_URL", "No disponible")
-    
+def api_status():
     return {
         "status": "online",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0",
-        "environment": os.getenv("ENVIRONMENT", "development"),
-        "deployment": {
-            "platform": "Render" if "RENDER" in os.environ else "Local",
-            "url": render_url,
-            "port": os.getenv("PORT", "10000")
-        },
-        "database": {
-            "available": DATABASE_AVAILABLE,
-            "connected": db_connected,
-            "name": db_info.get('database', 'No disponible'),
-            "tables": len(db_info.get('tables', [])),
-            "status": db_info.get('connection', 'Desconocido')
-        },
-        "modules": {
-            "database": DATABASE_AVAILABLE,
-            "models": MODELS_AVAILABLE,
-            "routers_loaded": ROUTERS_LOADED,
-            "shipping": SHIPPING_AVAILABLE,
-            "algorithms": ALGORITHMS_AVAILABLE
-        },
-        "system": {
-            "python_version": sys.version[:20],
-            "platform": sys.platform,
-            "host": socket.gethostname()
-        }
+        "version": "1.0.0",
+        "routes_ok": True,
+        "features": ["auth", "products", "cart", "orders", "algorithms", "shipping"],
     }
 
-@app.get("/api/db/status")
-def db_status():
-    """Endpoint para verificar el estado de la base de datos"""
-    if not DATABASE_AVAILABLE:
-        return {
-            "database": "MySQL Clever Cloud",
-            "connection": "❌ Módulo no disponible",
-            "database_name": "No disponible",
-            "error": "No se pudo importar database.py",
-            "timestamp": datetime.now().isoformat()
-        }
-    
-    connection_ok = test_connection()
-    info = get_database_info()
-    
+@app.get("/debug")
+def debug():
     return {
-        "database": "MySQL Clever Cloud",
-        "connection": "✅ Activa" if connection_ok else "❌ Fallida",
-        "database_name": info.get('database', 'No disponible'),
-        "tables_count": len(info.get('tables', [])),
-        "tables_list": info.get('tables', []),
-        "size_mb": info.get('size_mb', 0),
-        "host": info.get('host', 'No configurado'),
-        "error": info.get('error', None),
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/api/debug")
-async def debug_endpoint():
-    """Endpoint para debugging"""
-    import pkg_resources
-    
-    # Obtener paquetes instalados
-    packages = {}
-    try:
-        for dist in pkg_resources.working_set:
-            packages[dist.project_name] = dist.version
-    except:
-        packages = {"error": "No se pudieron obtener paquetes"}
-    
-    # Verificar archivos importantes
-    files_exist = {
-        "app/": os.path.exists("app"),
-        "app/database.py": os.path.exists("app/database.py"),
-        "app/models.py": os.path.exists("app/models.py"),
-        "requirements.txt": os.path.exists("requirements.txt"),
-    }
-    
-    return {
-        "timestamp": datetime.now().isoformat(),
-        "system": {
-            "cwd": os.getcwd(),
-            "files": os.listdir(".")[:10],
-            "files_exist": files_exist
-        },
-        "environment": {
-            "PORT": os.getenv("PORT", "No configurado"),
-            "ENVIRONMENT": os.getenv("ENVIRONMENT", "development"),
-            "MYSQL_HOST": os.getenv("MYSQL_HOST", "No configurado"),
-            "RENDER": "RENDER" in os.environ
-        },
-        "packages": {k: v for k, v in list(packages.items())[:10]}  # Primeros 10 paquetes
+        "pwd": os.getcwd(),
+        "templates": os.listdir("app/templates"),
+        "static": os.listdir("app/static") if os.path.exists("app/static") else [],
+        "url": "http://127.0.0.1:8000",
     }
 
 # ======================================================
-# 🟨 9. MANEJADOR DE ERRORES GLOBAL
+# 🟧 EJECUCIÓN DIRECTA (NO INCLUIDA EN app.main)
 # ======================================================
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Manejador global de excepciones"""
-    logger.error(f"Error en {request.url.path}: {str(exc)}")
-    
-    return JSONResponse(
-        status_code=500,
-        content={
-            "error": "Error interno del servidor",
-            "message": str(exc) if os.getenv("ENVIRONMENT") == "development" else "Contacte al administrador",
-            "path": request.url.path,
-            "timestamp": datetime.now().isoformat()
-        }
-    )
-
-# ======================================================
-# 🟥 10. EJECUCIÓN DIRECTA SOLO PARA DESARROLLO LOCAL
-# ======================================================
-
+# NOTA: Esta parte se ejecuta solo si ejecutas este archivo directamente
+# No es parte de la aplicación FastAPI normal
 if __name__ == "__main__":
-    # ESTO SOLO SE EJECUTA EN DESARROLLO LOCAL
-    # EN RENDER, SE USA EL START COMMAND
-    
     import uvicorn
-    
-    print("=" * 60)
-    print("🚀 TIENDA VIRTUAL - MODO DESARROLLO LOCAL")
-    print("=" * 60)
-    print("🔧 Este archivo solo para desarrollo local")
-    print("📌 En Render usa: uvicorn app.main:app --host 0.0.0.0 --port $PORT")
-    print("=" * 60)
-    
-    # Para desarrollo local
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",  # Usar 0.0.0.0 para compatibilidad
+        host="0.0.0.0",
         port=8000,
         reload=True,
         log_level="info"
