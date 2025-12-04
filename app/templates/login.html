@@ -3,77 +3,249 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iniciar sesión</title>
+    <title>Iniciar sesión - Tienda Virtual</title>
+    
+    <!-- Materialize CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <!-- Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
     <style>
         body {
-            font-family: "Segoe UI", sans-serif;
-            background: linear-gradient(135deg, #3b82f6, #9333ea);
-            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
             margin: 0;
+            font-family: 'Roboto', sans-serif;
         }
-        .login-box {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            padding: 2.5rem;
-            width: 350px;
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 20px;
+        }
+        .login-card {
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.3);
+        }
+        .login-header {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            color: white;
+            padding: 25px;
             text-align: center;
         }
-        h2 {
-            color: #333;
-            margin-bottom: 1rem;
+        .login-body {
+            padding: 30px;
+            background: white;
         }
-        input {
+        .error-message {
+            color: #f44336;
+            background: #ffebee;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+            text-align: center;
+            display: {% if error %}block{% else %}none{% endif %};
+        }
+        .btn-login {
             width: 100%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            border-radius: 10px;
-            border: 1px solid #ccc;
-            font-size: 1rem;
-        }
-        button {
-            width: 100%;
-            padding: 0.75rem;
-            background: #3b82f6;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        button:hover {
-            background: #2563eb;
-        }
-        .error {
-            color: #dc2626;
-            margin-top: 1rem;
+            margin-top: 20px;
+            border-radius: 25px;
+            height: 50px;
+            font-size: 16px;
             font-weight: bold;
         }
-        footer {
-            margin-top: 2rem;
-            font-size: 0.8rem;
+        .register-link {
+            text-align: center;
+            margin-top: 20px;
             color: #666;
+        }
+        .demo-credentials {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            font-size: 0.9rem;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin: 15px 0;
         }
     </style>
 </head>
 <body>
-    <div class="login-box">
-        <h2>🔐 Iniciar sesión</h2>
-        <form action="/auth/login" method="post">
-            <input type="text" name="username" placeholder="Usuario" required>
-            <input type="password" name="password" placeholder="Contraseña" required>
-            <button type="submit">Ingresar</button>
-        </form>
-
-        {% if error %}
-            <div class="error">{{ error }}</div>
-        {% endif %}
-
-        <footer>© 2025 - Sistema de Tienda Virtual</footer>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h4>
+                    <i class="material-icons" style="vertical-align: middle; margin-right: 10px;">store</i>
+                    Tienda Virtual
+                </h4>
+                <p>Inicia sesión para continuar</p>
+            </div>
+            
+            <div class="login-body">
+                <h5 class="center-align" style="color: #333; margin-bottom: 25px;">🔐 Iniciar Sesión</h5>
+                
+                <!-- FORMULARIO SIMPLE QUE FUNCIONA -->
+                <form id="loginForm" action="/api/auth/login" method="post">
+                    <div class="input-field">
+                        <i class="material-icons prefix">person</i>
+                        <input id="username" name="username" type="text" class="validate" required>
+                        <label for="username">Nombre de usuario</label>
+                    </div>
+                    
+                    <div class="input-field">
+                        <i class="material-icons prefix">lock</i>
+                        <input id="password" name="password" type="password" class="validate" required>
+                        <label for="password">Contraseña</label>
+                    </div>
+                    
+                    <div class="error-message" id="errorMessage">
+                        {% if error %}{{ error }}{% endif %}
+                    </div>
+                    
+                    <div class="loading" id="loading">
+                        <div class="preloader-wrapper small active">
+                            <div class="spinner-layer spinner-blue-only">
+                                <div class="circle-clipper left">
+                                    <div class="circle"></div>
+                                </div>
+                                <div class="gap-patch">
+                                    <div class="circle"></div>
+                                </div>
+                                <div class="circle-clipper right">
+                                    <div class="circle"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <p style="margin-top: 10px;">Verificando credenciales...</p>
+                    </div>
+                    
+                    <button class="btn waves-effect waves-light blue btn-login" type="submit" id="submitBtn">
+                        <i class="material-icons right">arrow_forward</i>
+                        Ingresar
+                    </button>
+                </form>
+                
+                <div class="demo-credentials">
+                    <p><strong>Credenciales de prueba:</strong></p>
+                    <p>Usuario: <code>admin</code> | Contraseña: <code>admin123</code></p>
+                    <p class="small grey-text">(Crea usuarios en /docs si no existen)</p>
+                </div>
+                
+                <div class="register-link">
+                    <p>
+                        ¿No tienes cuenta? 
+                        <a href="/docs#/users/create_user_users__post" target="_blank">
+                            Regístrate aquí (API)
+                        </a>
+                    </p>
+                    <p><a href="/">← Volver al inicio</a></p>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <!-- JavaScript -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+    
+    <script>
+        // Inicializar Materialize
+        document.addEventListener('DOMContentLoaded', function() {
+            M.AutoInit();
+            
+            // Verificar si ya está logueado
+            checkIfAlreadyLoggedIn();
+        });
+        
+        // Verificar si ya tiene sesión activa
+        async function checkIfAlreadyLoggedIn() {
+            try {
+                const response = await fetch('/api/auth/me');
+                if (response.ok) {
+                    // Ya está logueado, redirigir a home
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                // No está logueado, continuar
+            }
+        }
+        
+        // Manejar envío del formulario
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const submitBtn = document.getElementById('submitBtn');
+            const loadingDiv = document.getElementById('loading');
+            const errorDiv = document.getElementById('errorMessage');
+            
+            // Validar campos
+            if (!username || !password) {
+                errorDiv.textContent = 'Por favor completa todos los campos';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            // Mostrar loading
+            submitBtn.disabled = true;
+            loadingDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+            
+            try {
+                // Usar el formulario nativo para enviar (más confiable)
+                const form = document.getElementById('loginForm');
+                const formData = new FormData(form);
+                
+                // Enviar petición
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Accept': 'text/html'
+                    }
+                });
+                
+                if (response.redirected) {
+                    // Login exitoso, redirigir
+                    window.location.href = response.url;
+                } else if (response.status === 401) {
+                    // Credenciales incorrectas
+                    errorDiv.textContent = 'Usuario o contraseña incorrectos';
+                    errorDiv.style.display = 'block';
+                } else {
+                    // Intentar obtener texto del error
+                    try {
+                        const errorData = await response.json();
+                        errorDiv.textContent = errorData.detail || 'Error del servidor';
+                    } catch {
+                        errorDiv.textContent = 'Error del servidor. Intenta de nuevo.';
+                    }
+                    errorDiv.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorDiv.textContent = 'Error de conexión. Verifica tu internet.';
+                errorDiv.style.display = 'block';
+            } finally {
+                // Restaurar botón
+                submitBtn.disabled = false;
+                loadingDiv.style.display = 'none';
+            }
+        });
+        
+        // Permitir login con Enter
+        document.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !document.getElementById('submitBtn').disabled) {
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
 </body>
 </html>

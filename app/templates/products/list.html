@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+
+{% block title %}Catálogo de Productos{% endblock %}
+
+{% block head %}
+<style>
+    .product-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .product-image {
+        height: 200px;
+        object-fit: cover;
+        width: 100%;
+    }
+    .product-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    .product-actions {
+        margin-top: auto;
+        padding-top: 15px;
+        border-top: 1px solid #eee;
+    }
+    .price-tag {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #2196f3;
+        margin: 10px 0;
+    }
+    .stock-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        z-index: 1;
+    }
+    .in-stock {
+        background: #4caf50;
+        color: white;
+    }
+    .out-of-stock {
+        background: #f44336;
+        color: white;
+    }
+    .low-stock {
+        background: #ff9800;
+        color: white;
+    }
+    .filter-panel {
+        padding: 20px;
+        background: white;
+        border-radius: 10px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .sort-options {
+        margin-bottom: 20px;
+    }
+    .pagination {
+        margin-top: 30px;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+        color: #666;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        color: #ddd;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">storefront</i>
+            Catálogo de Productos
+        </h4>
+        <p class="grey-text">Explora todos los productos disponibles en nuestra tienda virtual</p>
+    </div>
+</div>
+
+<!-- Panel de filtros -->
+<div class="row filter-panel">
+    <div class="col s12">
+        <div class="row">
+            <div class="input-field col s12 m4">
+                <i class="material-icons prefix">search</i>
+                <input type="text" id="searchInput" placeholder="Buscar productos...">
+                <label for="searchInput">Buscar por nombre o descripción</label>
+            </div>
+            
+            <div class="input-field col s12 m3">
+                <select id="priceFilter">
+                    <option value="">Todos los precios</option>
+                    <option value="0-50">Menos de $50</option>
+                    <option value="50-100">$50 - $100</option>
+                    <option value="100-500">$100 - $500</option>
+                    <option value="500-">Más de $500</option>
+                </select>
+                <label>Filtrar por precio</label>
+            </div>
+            
+            <div class="input-field col s12 m3">
+                <select id="stockFilter">
+                    <option value="">Todo el stock</option>
+                    <option value="in_stock">En stock</option>
+                    <option value="out_of_stock">Sin stock</option>
+                    <option value="low_stock">Stock bajo</option>
+                </select>
+                <label>Filtrar por disponibilidad</label>
+            </div>
+            
+            <div class="col s12 m2">
+                <button class="btn waves-effect waves-light blue" onclick="applyFilters()" style="margin-top: 20px; width: 100%;">
+                    <i class="material-icons left">filter_list</i>
+                    Filtrar
+                </button>
+            </div>
+        </div>
+        
+        <div class="row sort-options">
+            <div class="col s12">
+                <label>Ordenar por:</label>
+                <a href="#" class="btn-small waves-effect blue lighten-4 blue-text" onclick="sortProducts('price', 'asc')">
+                    <i class="material-icons left">arrow_upward</i>Precio (menor a mayor)
+                </a>
+                <a href="#" class="btn-small waves-effect blue lighten-4 blue-text" onclick="sortProducts('price', 'desc')">
+                    <i class="material-icons left">arrow_downward</i>Precio (mayor a menor)
+                </a>
+                <a href="#" class="btn-small waves-effect blue lighten-4 blue-text" onclick="sortProducts('name', 'asc')">
+                    <i class="material-icons left">sort_by_alpha</i>Nombre (A-Z)
+                </a>
+                <a href="#" class="btn-small waves-effect blue lighten-4 blue-text" onclick="sortProducts('quantity', 'desc')">
+                    <i class="material-icons left">trending_up</i>Más stock
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estado de carga -->
+<div class="row" id="loadingState">
+    <div class="col s12 center-align">
+        <div class="preloader-wrapper big active">
+            <div class="spinner-layer spinner-blue-only">
+                <div class="circle-clipper left">
+                    <div class="circle"></div>
+                </div>
+                <div class="gap-patch">
+                    <div class="circle"></div>
+                </div>
+                <div class="circle-clipper right">
+                    <div class="circle"></div>
+                </div>
+            </div>
+        </div>
+        <p>Cargando productos...</p>
+    </div>
+</div>
+
+<!-- Estado vacío -->
+<div class="row" id="emptyState" style="display: none;">
+    <div class="col s12 empty-state">
+        <i class="material-icons">inventory</i>
+        <h5>No se encontraron productos</h5>
+        <p>No hay productos que coincidan con tus filtros.</p>
+        <button class="btn waves-effect waves-light blue" onclick="loadProducts()">
+            <i class="material-icons left">refresh</i>
+            Recargar productos
+        </button>
+    </div>
+</div>
+
+<!-- Lista de productos -->
+<div class="row" id="productList"></div>
+
+<!-- Paginación -->
+<div class="row pagination">
+    <div class="col s12 center-align">
+        <ul class="pagination" id="pagination">
+            <!-- La paginación se genera dinámicamente -->
+        </ul>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Variables globales
+let allProducts = [];
+let filteredProducts = [];
+let currentPage = 1;
+const productsPerPage = 12;
+
+// Cargar productos al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    loadProducts();
+    initializeMaterialize();
+});
+
+// Inicializar componentes de Materialize
+function initializeMaterialize() {
+    const elems = document.querySelectorAll('select');
+    M.FormSelect.init(elems);
+}
+
+// Cargar productos desde la API
+async function loadProducts() {
+    try {
+        showLoading(true);
+        
+        const response = await fetch('/api/products/list');
+        if (!response.ok) {
+            throw new Error('Error cargando productos');
+        }
+        
+        const products = await response.json();
+        allProducts = products;
+        filteredProducts = [...products];
+        
+        renderProducts();
+        updatePagination();
+        
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: 'Error cargando productos: ' + error.message,
+            classes: 'red'
+        });
+        showEmptyState();
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Aplicar filtros
+function applyFilters() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const priceFilter = document.getElementById('priceFilter').value;
+    const stockFilter = document.getElementById('stockFilter').value;
+    
+    filteredProducts = allProducts.filter(product => {
+        // Filtro de búsqueda
+        if (searchTerm && !product.name.toLowerCase().includes(searchTerm) && 
+            !(product.description && product.description.toLowerCase().includes(searchTerm))) {
+            return false;
+        }
+        
+        // Filtro de precio
+        if (priceFilter) {
+            const [min, max] = priceFilter.split('-').map(Number);
+            if (max === undefined) {
+                if (product.price < min) return false;
+            } else if (min === undefined) {
+                if (product.price > max) return false;
+            } else {
+                if (product.price < min || product.price > max) return false;
+            }
+        }
+        
+        // Filtro de stock
+        if (stockFilter) {
+            if (stockFilter === 'in_stock' && product.quantity <= 0) return false;
+            if (stockFilter === 'out_of_stock' && product.quantity > 0) return false;
+            if (stockFilter === 'low_stock' && (product.quantity <= 0 || product.quantity >= 10)) return false;
+        }
+        
+        return true;
+    });
+    
+    currentPage = 1;
+    renderProducts();
+    updatePagination();
+}
+
+// Ordenar productos
+function sortProducts(by, order) {
+    filteredProducts.sort((a, b) => {
+        let aVal, bVal;
+        
+        if (by === 'price') {
+            aVal = a.price;
+            bVal = b.price;
+        } else if (by === 'name') {
+            aVal = a.name.toLowerCase();
+            bVal = b.name.toLowerCase();
+        } else if (by === 'quantity') {
+            aVal = a.quantity;
+            bVal = b.quantity;
+        } else {
+            aVal = a.id;
+            bVal = b.id;
+        }
+        
+        if (order === 'asc') {
+            return aVal > bVal ? 1 : -1;
+        } else {
+            return aVal < bVal ? 1 : -1;
+        }
+    });
+    
+    currentPage = 1;
+    renderProducts();
+    updatePagination();
+}
+
+// Renderizar productos
+function renderProducts() {
+    const container = document.getElementById('productList');
+    container.innerHTML = '';
+    
+    const startIndex = (currentPage - 1) * productsPerPage;
+    const endIndex = startIndex + productsPerPage;
+    const pageProducts = filteredProducts.slice(startIndex, endIndex);
+    
+    if (pageProducts.length === 0) {
+        showEmptyState();
+        return;
+    }
+    
+    pageProducts.forEach(product => {
+        const stockClass = product.quantity <= 0 ? 'out-of-stock' : 
+                          product.quantity < 10 ? 'low-stock' : 'in-stock';
+        const stockText = product.quantity <= 0 ? 'SIN STOCK' : 
+                          product.quantity < 10 ? `¡ÚLTIMAS ${product.quantity}!` : 'EN STOCK';
+        
+        const imageUrl = product.image_url || product.image_path || '/static/no-image.png';
+        
+        container.innerHTML += `
+            <div class="col s12 m6 l4">
+                <div class="card product-card hoverable">
+                    <div class="card-image">
+                        <img src="${imageUrl}" class="product-image" alt="${product.name}" 
+                             onerror="this.src='/static/no-image.png'">
+                        <span class="stock-badge ${stockClass}">${stockText}</span>
+                    </div>
+                    <div class="card-content product-content">
+                        <span class="card-title activator grey-text text-darken-4">
+                            ${product.name}
+                            <i class="material-icons right">more_vert</i>
+                        </span>
+                        <p>${product.description ? (product.description.substring(0, 100) + '...') : 'Sin descripción'}</p>
+                        
+                        <div class="price-tag">$${product.price.toFixed(2)}</div>
+                        
+                        <div class="product-actions">
+                            <div class="row" style="margin-bottom: 0;">
+                                <div class="col s6">
+                                    <p class="grey-text">
+                                        <i class="material-icons tiny">inventory</i>
+                                        Stock: ${product.quantity}
+                                    </p>
+                                </div>
+                                <div class="col s6 right-align">
+                                    <a href="#" class="btn-floating btn-small blue" onclick="addToCart(${product.id})">
+                                        <i class="material-icons">add_shopping_cart</i>
+                                    </a>
+                                    <a href="#" class="btn-floating btn-small green" onclick="viewProduct(${product.id})">
+                                        <i class="material-icons">visibility</i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-reveal">
+                        <span class="card-title grey-text text-darken-4">
+                            ${product.name}
+                            <i class="material-icons right">close</i>
+                        </span>
+                        <p>${product.description || 'No hay descripción detallada.'}</p>
+                        <p><strong>Precio:</strong> $${product.price.toFixed(2)}</p>
+                        <p><strong>Stock disponible:</strong> ${product.quantity} unidades</p>
+                        <p><strong>Vendedor:</strong> ${product.owner_id || 'Sistema'}</p>
+                        <div class="divider"></div>
+                        <div class="center-align" style="margin-top: 20px;">
+                            <button class="btn waves-effect waves-light blue" onclick="addToCart(${product.id})">
+                                <i class="material-icons left">add_shopping_cart</i>
+                                Agregar al carrito
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    // Inicializar card reveals
+    const cardReveals = document.querySelectorAll('.card-reveal');
+    cardReveals.forEach(card => {
+        M.Card.init(card.parentElement);
+    });
+}
+
+// Actualizar paginación
+function updatePagination() {
+    const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+    const pagination = document.getElementById('pagination');
+    
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
+    
+    let html = '';
+    
+    // Botón anterior
+    html += `<li class="${currentPage === 1 ? 'disabled' : 'waves-effect'}">`;
+    html += `<a href="#" onclick="changePage(${currentPage - 1})"><i class="material-icons">chevron_left</i></a></li>`;
+    
+    // Números de página
+    for (let i = 1; i <= totalPages; i++) {
+        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+            html += `<li class="${i === currentPage ? 'active blue' : 'waves-effect'}">`;
+            html += `<a href="#" onclick="changePage(${i})">${i}</a></li>`;
+        } else if (i === currentPage - 3 || i === currentPage + 3) {
+            html += `<li class="disabled"><a href="#!">...</a></li>`;
+        }
+    }
+    
+    // Botón siguiente
+    html += `<li class="${currentPage === totalPages ? 'disabled' : 'waves-effect'}">`;
+    html += `<a href="#" onclick="changePage(${currentPage + 1})"><i class="material-icons">chevron_right</i></a></li>`;
+    
+    pagination.innerHTML = html;
+}
+
+// Cambiar página
+function changePage(page) {
+    const totalPages = Math.ceil(filteredProducts.length / productsPerPage);
+    
+    if (page < 1 || page > totalPages || page === currentPage) {
+        return;
+    }
+    
+    currentPage = page;
+    renderProducts();
+    updatePagination();
+    
+    // Scroll suave hacia arriba
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Agregar producto al carrito
+async function addToCart(productId) {
+    if (!window.authManager || !window.authManager.isAuthenticated()) {
+        M.toast({
+            html: 'Debes iniciar sesión para agregar productos al carrito',
+            classes: 'orange',
+            displayLength: 3000
+        });
+        setTimeout(() => {
+            window.location.href = '/auth/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }, 1000);
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/cart/add/${productId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            M.toast({
+                html: '✅ Producto agregado al carrito',
+                classes: 'green',
+                displayLength: 2000
+            });
+        } else {
+            const error = await response.json();
+            M.toast({
+                html: '❌ Error: ' + (error.detail || 'No se pudo agregar al carrito'),
+                classes: 'red'
+            });
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: '❌ Error de conexión',
+            classes: 'red'
+        });
+    }
+}
+
+// Ver detalles del producto
+function viewProduct(productId) {
+    // Podría abrir un modal o redirigir a una página de detalles
+    M.toast({
+        html: `Viendo producto ${productId} (función en desarrollo)`,
+        classes: 'blue'
+    });
+}
+
+// Mostrar/ocultar loading
+function showLoading(show) {
+    document.getElementById('loadingState').style.display = show ? 'block' : 'none';
+    document.getElementById('productList').style.display = show ? 'none' : 'block';
+    document.getElementById('pagination').style.display = show ? 'none' : 'block';
+}
+
+// Mostrar estado vacío
+function showEmptyState() {
+    document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('productList').style.display = 'none';
+    document.getElementById('pagination').style.display = 'none';
+}
+</script>
+{% endblock %}

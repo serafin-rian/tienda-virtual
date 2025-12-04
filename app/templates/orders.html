@@ -1,0 +1,500 @@
+{% extends "base.html" %}
+
+{% block title %}Mis Pedidos{% endblock %}
+
+{% block head %}
+<style>
+    .order-card {
+        margin-bottom: 20px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .order-header {
+        padding: 15px 20px;
+        background: #f5f5f5;
+        border-bottom: 1px solid #eee;
+    }
+    .order-body {
+        padding: 20px;
+        background: white;
+    }
+    .order-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #eee;
+    }
+    .order-item:last-child {
+        border-bottom: none;
+    }
+    .order-status {
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        text-transform: uppercase;
+    }
+    .status-pending { background: #fff3cd; color: #856404; }
+    .status-confirmed { background: #d1ecf1; color: #0c5460; }
+    .status-shipped { background: #d4edda; color: #155724; }
+    .status-delivered { background: #c3e6cb; color: #155724; }
+    .status-cancelled { background: #f8d7da; color: #721c24; }
+    .empty-orders {
+        text-align: center;
+        padding: 50px 20px;
+    }
+    .empty-orders i {
+        font-size: 5rem;
+        color: #ddd;
+        margin-bottom: 20px;
+    }
+    .tracking-btn {
+        margin-top: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">receipt</i>
+            Mis Pedidos
+        </h4>
+        <p class="grey-text">Historial y seguimiento de todos tus pedidos</p>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="row">
+    <div class="col s12">
+        <div class="card-panel blue lighten-5">
+            <div class="row" style="margin-bottom: 0;">
+                <div class="col s12 m4">
+                    <select id="statusFilter" onchange="filterOrders()">
+                        <option value="">Todos los estados</option>
+                        <option value="pending">Pendiente</option>
+                        <option value="confirmed">Confirmado</option>
+                        <option value="shipped">Enviado</option>
+                        <option value="delivered">Entregado</option>
+                        <option value="cancelled">Cancelado</option>
+                    </select>
+                </div>
+                <div class="col s12 m4">
+                    <input type="text" id="searchOrder" placeholder="Buscar por número de orden..." onkeyup="filterOrders()">
+                </div>
+                <div class="col s12 m4 right-align">
+                    <button class="btn waves-effect waves-light blue" onclick="loadOrders()">
+                        <i class="material-icons left">refresh</i>
+                        Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div class="row" id="loadingOrders">
+    <div class="col s12 center-align">
+        <div class="preloader-wrapper big active">
+            <div class="spinner-layer spinner-blue-only">
+                <div class="circle-clipper left">
+                    <div class="circle"></div>
+                </div>
+                <div class="gap-patch">
+                    <div class="circle"></div>
+                </div>
+                <div class="circle-clipper right">
+                    <div class="circle"></div>
+                </div>
+            </div>
+        </div>
+        <p>Cargando tus pedidos...</p>
+    </div>
+</div>
+
+<!-- Empty state -->
+<div class="row" id="emptyOrders" style="display: none;">
+    <div class="col s12 empty-orders">
+        <i class="material-icons">receipt_long</i>
+        <h5>No tienes pedidos aún</h5>
+        <p>¡Comienza a comprar para ver tus pedidos aquí!</p>
+        <a href="/catalogo" class="btn waves-effect waves-light blue">
+            <i class="material-icons left">store</i>
+            Ir al catálogo
+        </a>
+    </div>
+</div>
+
+<!-- Lista de pedidos -->
+<div class="row" id="ordersList"></div>
+
+<!-- Estadísticas -->
+<div class="row" id="orderStats" style="display: none;">
+    <div class="col s12">
+        <div class="card grey lighten-4">
+            <div class="card-content">
+                <span class="card-title">Estadísticas de pedidos</span>
+                <div class="row center-align">
+                    <div class="col s6 m3">
+                        <h5 id="totalOrders">0</h5>
+                        <p>Total pedidos</p>
+                    </div>
+                    <div class="col s6 m3">
+                        <h5 id="totalSpent">$0</h5>
+                        <p>Total gastado</p>
+                    </div>
+                    <div class="col s6 m3">
+                        <h5 id="avgOrder">$0</h5>
+                        <p>Pedido promedio</p>
+                    </div>
+                    <div class="col s6 m3">
+                        <h5 id="lastOrder">--</h5>
+                        <p>Último pedido</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allOrders = [];
+let filteredOrders = [];
+
+// Cargar pedidos al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.authManager && window.authManager.isAuthenticated()) {
+        loadOrders();
+    } else {
+        showEmptyOrders();
+        M.toast({
+            html: 'Debes iniciar sesión para ver tus pedidos',
+            classes: 'orange'
+        });
+    }
+    
+    // Inicializar select
+    const elems = document.querySelectorAll('select');
+    M.FormSelect.init(elems);
+});
+
+// Cargar pedidos desde API
+async function loadOrders() {
+    try {
+        showLoading(true);
+        
+        const response = await fetch('/api/orders/my-orders');
+        
+        if (response.status === 401) {
+            window.location.href = '/auth/login?redirect=/mis-pedidos';
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error('Error cargando pedidos');
+        }
+        
+        const data = await response.json();
+        allOrders = data.orders || [];
+        filteredOrders = [...allOrders];
+        
+        renderOrders();
+        updateStats();
+        
+        if (allOrders.length === 0) {
+            showEmptyOrders();
+        } else {
+            showOrders();
+        }
+        
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: 'Error cargando pedidos: ' + error.message,
+            classes: 'red'
+        });
+        showEmptyOrders();
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Filtrar pedidos
+function filterOrders() {
+    const statusFilter = document.getElementById('statusFilter').value;
+    const searchTerm = document.getElementById('searchOrder').value.toLowerCase();
+    
+    filteredOrders = allOrders.filter(order => {
+        // Filtro por estado
+        if (statusFilter && order.status !== statusFilter) {
+            return false;
+        }
+        
+        // Filtro por búsqueda
+        if (searchTerm && !order.order_number.toLowerCase().includes(searchTerm)) {
+            return false;
+        }
+        
+        return true;
+    });
+    
+    renderOrders();
+}
+
+// Renderizar pedidos
+function renderOrders() {
+    const container = document.getElementById('ordersList');
+    container.innerHTML = '';
+    
+    if (filteredOrders.length === 0) {
+        container.innerHTML = `
+            <div class="col s12">
+                <div class="card-panel yellow lighten-4">
+                    <p class="center-align">No hay pedidos que coincidan con los filtros</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    filteredOrders.forEach(order => {
+        const statusClass = `status-${order.status}`;
+        const statusText = {
+            'pending': 'Pendiente',
+            'confirmed': 'Confirmado',
+            'shipped': 'Enviado',
+            'delivered': 'Entregado',
+            'cancelled': 'Cancelado'
+        }[order.status] || order.status;
+        
+        const date = new Date(order.created_at).toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        container.innerHTML += `
+            <div class="col s12">
+                <div class="card order-card">
+                    <div class="order-header">
+                        <div class="row" style="margin-bottom: 0;">
+                            <div class="col s12 m6">
+                                <h6 style="margin: 0;">
+                                    <strong>Pedido #${order.order_number}</strong>
+                                    <span class="order-status ${statusClass}">${statusText}</span>
+                                </h6>
+                                <small class="grey-text">Realizado el ${date}</small>
+                            </div>
+                            <div class="col s12 m6 right-align">
+                                <h5 style="margin: 0; color: #2196f3;">$${order.total_amount.toFixed(2)}</h5>
+                                <small class="grey-text">ID: ${order.id}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="order-body">
+                        <div class="row">
+                            <div class="col s12 m8">
+                                <h6>Productos:</h6>
+                                <div id="order-items-${order.id}">
+                                    <p>Cargando productos...</p>
+                                </div>
+                            </div>
+                            <div class="col s12 m4">
+                                <h6>Detalles:</h6>
+                                <p><strong>Estado:</strong> ${statusText}</p>
+                                <p><strong>Método de pago:</strong> ${order.payment_method || 'No especificado'}</p>
+                                <p><strong>Dirección:</strong> ${order.shipping_address || 'No especificada'}</p>
+                                
+                                <div class="center-align" style="margin-top: 20px;">
+                                    <button class="btn waves-effect waves-light blue" onclick="viewOrderDetails(${order.id})">
+                                        <i class="material-icons left">visibility</i>
+                                        Ver detalles
+                                    </button>
+                                    
+                                    ${order.status === 'pending' || order.status === 'confirmed' ? `
+                                    <button class="btn waves-effect waves-light red" onclick="cancelOrder(${order.id})" style="margin-top: 10px;">
+                                        <i class="material-icons left">cancel</i>
+                                        Cancelar
+                                    </button>
+                                    ` : ''}
+                                    
+                                    ${order.status === 'delivered' ? `
+                                    <button class="btn waves-effect waves-light green tracking-btn" onclick="reorder(${order.id})">
+                                        <i class="material-icons left">replay</i>
+                                        Volver a pedir
+                                    </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Cargar items del pedido
+        loadOrderItems(order.id);
+    });
+}
+
+// Cargar items de un pedido
+async function loadOrderItems(orderId) {
+    try {
+        const response = await fetch(`/api/orders/${orderId}`);
+        if (response.ok) {
+            const orderData = await response.json();
+            const itemsContainer = document.getElementById(`order-items-${orderId}`);
+            
+            if (orderData.items && orderData.items.length > 0) {
+                let itemsHtml = '';
+                orderData.items.forEach(item => {
+                    itemsHtml += `
+                        <div class="order-item">
+                            <div>
+                                <strong>${item.product_name}</strong>
+                                <p class="grey-text" style="margin: 5px 0;">$${item.product_price.toFixed(2)} x ${item.quantity}</p>
+                            </div>
+                            <div>
+                                <strong>$${item.subtotal.toFixed(2)}</strong>
+                            </div>
+                        </div>
+                    `;
+                });
+                itemsContainer.innerHTML = itemsHtml;
+            }
+        }
+    } catch (error) {
+        console.error('Error cargando items:', error);
+    }
+}
+
+// Ver detalles del pedido
+function viewOrderDetails(orderId) {
+    // Por implementar: modal o página de detalles
+    M.toast({
+        html: `Viendo detalles del pedido ${orderId} (función en desarrollo)`,
+        classes: 'blue'
+    });
+}
+
+// Cancelar pedido
+async function cancelOrder(orderId) {
+    if (!confirm('¿Estás seguro de que quieres cancelar este pedido?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/orders/${orderId}/cancel`, {
+            method: 'PUT'
+        });
+        
+        if (response.ok) {
+            M.toast({
+                html: '✅ Pedido cancelado exitosamente',
+                classes: 'green'
+            });
+            // Recargar pedidos
+            loadOrders();
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || 'Error cancelando pedido');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: '❌ Error: ' + error.message,
+            classes: 'red'
+        });
+    }
+}
+
+// Reordenar pedido
+async function reorder(orderId) {
+    try {
+        const response = await fetch(`/api/orders/${orderId}/reorder`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            M.toast({
+                html: '✅ ¡Pedido recreado! Redirigiendo al carrito...',
+                classes: 'green'
+            });
+            
+            setTimeout(() => {
+                window.location.href = '/mi-carrito';
+            }, 1500);
+        } else {
+            const error = await response.json();
+            throw new Error(error.detail || 'Error reordenando pedido');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: '❌ Error: ' + error.message,
+            classes: 'red'
+        });
+    }
+}
+
+// Actualizar estadísticas
+function updateStats() {
+    if (allOrders.length === 0) {
+        document.getElementById('orderStats').style.display = 'none';
+        return;
+    }
+    
+    document.getElementById('orderStats').style.display = 'block';
+    
+    const totalOrders = allOrders.length;
+    const totalSpent = allOrders.reduce((sum, order) => sum + order.total_amount, 0);
+    const avgOrder = totalSpent / totalOrders;
+    const lastOrder = allOrders.length > 0 ? allOrders[0].order_number : '--';
+    
+    document.getElementById('totalOrders').textContent = totalOrders;
+    document.getElementById('totalSpent').textContent = `$${totalSpent.toFixed(2)}`;
+    document.getElementById('avgOrder').textContent = `$${avgOrder.toFixed(2)}`;
+    document.getElementById('lastOrder').textContent = lastOrder;
+}
+
+// Mostrar/ocultar loading
+function showLoading(show) {
+    document.getElementById('loadingOrders').style.display = show ? 'block' : 'none';
+    document.getElementById('ordersList').style.display = show ? 'none' : 'block';
+}
+
+// Mostrar pedidos
+function showOrders() {
+    document.getElementById('emptyOrders').style.display = 'none';
+    document.getElementById('ordersList').style.display = 'block';
+    document.getElementById('orderStats').style.display = 'block';
+}
+
+// Mostrar estado vacío
+function showEmptyOrders() {
+    document.getElementById('emptyOrders').style.display = 'block';
+    document.getElementById('ordersList').style.display = 'none';
+    document.getElementById('orderStats').style.display = 'none';
+    document.getElementById('loadingOrders').style.display = 'none';
+}
+
+// Escuchar cambios de autenticación
+window.addEventListener('auth-change', function(event) {
+    if (event.detail.authenticated) {
+        loadOrders();
+    } else {
+        showEmptyOrders();
+    }
+});
+</script>
+{% endblock %}

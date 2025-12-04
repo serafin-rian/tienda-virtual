@@ -1,0 +1,8 @@
+Credenciales MySQL Clever Cloud
+MYSQL_HOST=b9maju0mn8eag2enhzhd-mysql.services.clever-cloud.com
+MYSQL_PORT=3306
+MYSQL_DATABASE=b9maju0mn6eaq2enhzhd
+MYSQL_USERNAME=juanksr208@gmail.com
+MYSQL_PASSWORD=3fAP9h7uGC22Q92N0znm
+
+URL= mysql://uwfhtgrqz7c8pjdg:3fAP9h7uGC22Q92N0znm@b9maju0mn8eag2enhzhd-mysql.services.clever-cloud.com:3306/b9maju0mn8eag2enhzhd

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Perfil de Usuario{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">person</i>
+            Perfil de Usuario
+        </h4>
+        <p class="grey-text">Información del usuario actual</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col s12 m6">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title">Modo Sin Autenticación</span>
+                <p>El sistema está funcionando en modo sin autenticación. Todos los endpoints son accesibles libremente.</p>
+                <div class="card-panel blue lighten-5">
+                    <p><strong>Usuario actual:</strong> anonymous</p>
+                    <p><strong>Rol:</strong> customer</p>
+                    <p><strong>ID:</strong> 1</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col s12 m6">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title">Crear Usuario</span>
+                <p>Puedes crear usuarios usando la interfaz web:</p>
+                <div class="center-align">
+                    <a href="/registro" class="btn waves-effect waves-light blue">
+                        <i class="material-icons left">person_add</i>
+                        Crear Nuevo Usuario
+                    </a>
+                </div>
+                <p class="grey-text" style="margin-top: 15px;">O ver todos los usuarios:</p>
+                <div class="center-align">
+                    <a href="/usuarios" class="btn waves-effect waves-light green">
+                        <i class="material-icons left">people</i>
+                        Ver Usuarios
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col s12">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title">Acceso Directo</span>
+                <div class="row">
+                    <div class="col s6 m3">
+                        <a href="/api/users" class="btn waves-effect waves-light blue" style="width: 100%; margin-bottom: 10px;">
+                            <i class="material-icons left">people</i>
+                            Usuarios
+                        </a>
+                    </div>
+                    <div class="col s6 m3">
+                        <a href="/api/products/list" class="btn waves-effect waves-light green" style="width: 100%; margin-bottom: 10px;">
+                            <i class="material-icons left">store</i>
+                            Productos
+                        </a>
+                    </div>
+                    <div class="col s6 m3">
+                        <a href="/api/cart/summary" class="btn waves-effect waves-light orange" style="width: 100%; margin-bottom: 10px;">
+                            <i class="material-icons left">shopping_cart</i>
+                            Carrito
+                        </a>
+                    </div>
+                    <div class="col s6 m3">
+                        <a href="/api/algorithms/sort" class="btn waves-effect waves-light purple" style="width: 100%; margin-bottom: 10px;">
+                            <i class="material-icons left">psychology</i>
+                            Algoritmos
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

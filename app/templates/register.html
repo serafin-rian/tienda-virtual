@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+
+{% block title %}Registrarse - Tienda Virtual{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12 m8 offset-m2 l6 offset-l3">
+        <div class="card">
+            <div class="card-content">
+                <span class="card-title center-align blue-text">
+                    <i class="material-icons large">person_add</i><br>
+                    Crear Nueva Cuenta
+                </span>
+                
+                <!-- Formulario de registro -->
+                <form id="registerForm">
+                    <div class="row">
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">person</i>
+                            <input id="username" type="text" class="validate" required>
+                            <label for="username">Nombre de usuario</label>
+                            <span class="helper-text">Mínimo 3 caracteres</span>
+                        </div>
+                        
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">lock</i>
+                            <input id="password" type="password" class="validate" required>
+                            <label for="password">Contraseña</label>
+                            <span class="helper-text">Mínimo 6 caracteres</span>
+                        </div>
+                        
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">lock_outline</i>
+                            <input id="confirm_password" type="password" class="validate" required>
+                            <label for="confirm_password">Confirmar contraseña</label>
+                        </div>
+                        
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">work</i>
+                            <select id="role" class="validate" required>
+                                <option value="" disabled selected>Elige un rol</option>
+                                <option value="customer">Cliente</option>
+                                <option value="vendor">Vendedor</option>
+                                <option value="admin">Administrador</option>
+                            </select>
+                            <label>Rol de usuario</label>
+                        </div>
+                        
+                        <div class="col s12">
+                            <div id="errorMessage" class="red-text" style="display: none; padding: 10px; background: #ffebee; border-radius: 5px; margin-bottom: 15px;"></div>
+                            <div id="successMessage" class="green-text" style="display: none; padding: 10px; background: #e8f5e8; border-radius: 5px; margin-bottom: 15px;"></div>
+                        </div>
+                        
+                        <div class="col s12 center-align">
+                            <button class="btn waves-effect waves-light blue" type="submit" id="submitBtn">
+                                <i class="material-icons left">person_add</i>
+                                Crear Cuenta
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <div class="divider" style="margin: 30px 0;"></div>
+                
+                <div class="center-align">
+                    <h6>Roles disponibles:</h6>
+                    <div class="row">
+                        <div class="col s12 m4">
+                            <div class="card-panel blue lighten-5">
+                                <i class="material-icons blue-text">person</i>
+                                <h6>Cliente</h6>
+                                <p>Puede comprar productos y ver catálogo</p>
+                            </div>
+                        </div>
+                        <div class="col s12 m4">
+                            <div class="card-panel green lighten-5">
+                                <i class="material-icons green-text">store</i>
+                                <h6>Vendedor</h6>
+                                <p>Puede crear y gestionar productos</p>
+                            </div>
+                        </div>
+                        <div class="col s12 m4">
+                            <div class="card-panel red lighten-5">
+                                <i class="material-icons red-text">admin_panel_settings</i>
+                                <h6>Administrador</h6>
+                                <p>Acceso completo al sistema</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="center-align" style="margin-top: 20px;">
+                    <a href="/" class="btn waves-effect waves-light grey">
+                        <i class="material-icons left">arrow_back</i>
+                        Volver al inicio
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar select
+    const elems = document.querySelectorAll('select');
+    M.FormSelect.init(elems);
+    
+    // Manejar envío del formulario
+    document.getElementById('registerForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+        const confirmPassword = document.getElementById('confirm_password').value;
+        const role = document.getElementById('role').value;
+        
+        const errorDiv = document.getElementById('errorMessage');
+        const successDiv = document.getElementById('successMessage');
+        const submitBtn = document.getElementById('submitBtn');
+        
+        // Limpiar mensajes
+        errorDiv.style.display = 'none';
+        successDiv.style.display = 'none';
+        
+        // Validaciones
+        if (username.length < 3) {
+            errorDiv.textContent = 'El nombre de usuario debe tener al menos 3 caracteres';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        if (password.length < 6) {
+            errorDiv.textContent = 'La contraseña debe tener al menos 6 caracteres';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        if (password !== confirmPassword) {
+            errorDiv.textContent = 'Las contraseñas no coinciden';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        if (!role) {
+            errorDiv.textContent = 'Debes seleccionar un rol';
+            errorDiv.style.display = 'block';
+            return;
+        }
+        
+        // Deshabilitar botón
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="material-icons left">hourglass_empty</i> Creando cuenta...';
+        
+        try {
+            // Crear FormData
+            const formData = new FormData();
+            formData.append('username', username);
+            formData.append('password', password);
+            formData.append('role', role);
+            
+            // Enviar petición
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                
+                successDiv.innerHTML = `
+                    <i class="material-icons left">check_circle</i>
+                    ¡Cuenta creada exitosamente!<br>
+                    <strong>Usuario:</strong> ${result.user.username}<br>
+                    <strong>Rol:</strong> ${result.user.role}<br>
+                    <strong>ID:</strong> ${result.user.id}
+                `;
+                successDiv.style.display = 'block';
+                
+                // Limpiar formulario
+                document.getElementById('registerForm').reset();
+                M.FormSelect.init(document.getElementById('role'));
+                
+                // Redirigir después de 3 segundos
+                setTimeout(() => {
+                    window.location.href = '/usuarios';
+                }, 3000);
+                
+            } else {
+                const error = await response.json();
+                errorDiv.textContent = error.detail || 'Error al crear la cuenta';
+                errorDiv.style.display = 'block';
+            }
+            
+        } catch (error) {
+            console.error('Error:', error);
+            errorDiv.textContent = 'Error de conexión. Intenta nuevamente.';
+            errorDiv.style.display = 'block';
+        } finally {
+            // Restaurar botón
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="material-icons left">person_add</i> Crear Cuenta';
+        }
+    });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,785 @@
+{% extends "base.html" %}
+
+{% block title %}Crear Producto - Tienda Virtual{% endblock %}
+
+{% block head %}
+<style>
+    .create-product-card {
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .form-section {
+        padding: 25px;
+    }
+    .image-upload-area {
+        border: 2px dashed #2196f3;
+        border-radius: 10px;
+        padding: 40px 20px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: #f8fbff;
+    }
+    .image-upload-area:hover {
+        border-color: #1976d2;
+        background: #e3f2fd;
+    }
+    .image-upload-area.dragover {
+        border-color: #4caf50;
+        background: #e8f5e9;
+    }
+    .preview-container {
+        margin-top: 20px;
+        text-align: center;
+    }
+    .image-preview {
+        max-width: 300px;
+        max-height: 300px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    }
+    .requirements-list {
+        margin: 20px 0;
+        padding: 15px;
+        background: #f5f5f5;
+        border-radius: 8px;
+    }
+    .requirements-list li {
+        margin: 8px 0;
+    }
+    .form-actions {
+        margin-top: 30px;
+        padding-top: 20px;
+        border-top: 1px solid #eee;
+    }
+    .loading-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.95);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    .success-message {
+        padding: 20px;
+        background: #e8f5e9;
+        border-radius: 8px;
+        border-left: 4px solid #4caf50;
+        margin: 20px 0;
+        display: none;
+    }
+    .error-message {
+        padding: 20px;
+        background: #ffebee;
+        border-radius: 8px;
+        border-left: 4px solid #f44336;
+        margin: 20px 0;
+        display: none;
+    }
+    .stock-indicator {
+        display: inline-block;
+        padding: 5px 10px;
+        border-radius: 15px;
+        font-size: 0.9rem;
+        margin-left: 10px;
+    }
+    .stock-low {
+        background: #fff3cd;
+        color: #856404;
+    }
+    .stock-ok {
+        background: #d4edda;
+        color: #155724;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">add_box</i>
+            Crear Nuevo Producto
+        </h4>
+        <p class="grey-text">Agrega un nuevo producto a la tienda virtual</p>
+    </div>
+</div>
+
+<!-- Overlay de carga -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="preloader-wrapper big active">
+        <div class="spinner-layer spinner-blue-only">
+            <div class="circle-clipper left">
+                <div class="circle"></div>
+            </div>
+            <div class="gap-patch">
+                <div class="circle"></div>
+            </div>
+            <div class="circle-clipper right">
+                <div class="circle"></div>
+            </div>
+        </div>
+    </div>
+    <p id="loadingMessage">Creando producto...</p>
+</div>
+
+<!-- Mensajes de éxito/error -->
+<div class="success-message" id="successMessage">
+    <div style="display: flex; align-items: center;">
+        <i class="material-icons green-text" style="font-size: 2.5rem; margin-right: 15px;">check_circle</i>
+        <div>
+            <h5>¡Producto creado exitosamente!</h5>
+            <p id="successDetails"></p>
+            <div style="margin-top: 15px;">
+                <a href="/catalogo" class="btn waves-effect waves-light green">
+                    <i class="material-icons left">store</i>
+                    Ver en catálogo
+                </a>
+                <button class="btn waves-effect waves-light blue" onclick="resetForm()">
+                    <i class="material-icons left">add</i>
+                    Crear otro producto
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="error-message" id="errorMessage">
+    <div style="display: flex; align-items: center;">
+        <i class="material-icons red-text" style="font-size: 2.5rem; margin-right: 15px;">error</i>
+        <div>
+            <h5>Error al crear producto</h5>
+            <p id="errorDetails"></p>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col s12">
+        <div class="card create-product-card">
+            <div class="card-content form-section">
+                <form id="createProductForm" enctype="multipart/form-data">
+                    <div class="row">
+                        <!-- Información básica del producto -->
+                        <div class="col s12">
+                            <h5><i class="material-icons left">info</i>Información básica</h5>
+                            <div class="divider" style="margin: 15px 0;"></div>
+                        </div>
+                        
+                        <div class="input-field col s12 m6">
+                            <i class="material-icons prefix">title</i>
+                            <input id="productName" type="text" class="validate" required>
+                            <label for="productName">Nombre del producto *</label>
+                            <span class="helper-text">Mínimo 3 caracteres</span>
+                        </div>
+                        
+                        <div class="input-field col s12 m6">
+                            <i class="material-icons prefix">attach_money</i>
+                            <input id="productPrice" type="number" step="0.01" min="0.01" class="validate" required>
+                            <label for="productPrice">Precio ($) *</label>
+                            <span class="helper-text">Precio en dólares</span>
+                        </div>
+                        
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">description</i>
+                            <textarea id="productDescription" class="materialize-textarea" data-length="500"></textarea>
+                            <label for="productDescription">Descripción</label>
+                            <span class="helper-text">Describe tu producto (opcional, máximo 500 caracteres)</span>
+                        </div>
+                        
+                        <!-- Cantidad y disponibilidad -->
+                        <div class="col s12">
+                            <h5><i class="material-icons left">inventory</i>Stock y disponibilidad</h5>
+                            <div class="divider" style="margin: 15px 0;"></div>
+                        </div>
+                        
+                        <div class="input-field col s12 m6">
+                            <i class="material-icons prefix">layers</i>
+                            <input id="productQuantity" type="number" min="0" value="0" class="validate" required>
+                            <label for="productQuantity">Cantidad disponible *</label>
+                            <span class="helper-text">Cantidad en inventario</span>
+                        </div>
+                        
+                        <div class="col s12 m6">
+                            <label style="display: block; margin-bottom: 10px;">
+                                <input type="checkbox" id="requiresShipping" checked />
+                                <span>Requiere envío físico</span>
+                            </label>
+                            <small class="grey-text">Desmarca si es producto digital o servicio</small>
+                        </div>
+                        
+                        <!-- Imagen del producto -->
+                        <div class="col s12">
+                            <h5><i class="material-icons left">image</i>Imagen del producto</h5>
+                            <div class="divider" style="margin: 15px 0;"></div>
+                            
+                            <div class="image-upload-area" id="imageUploadArea">
+                                <i class="material-icons large blue-text">cloud_upload</i>
+                                <h5>Arrastra y suelta una imagen aquí</h5>
+                                <p>o haz clic para seleccionar un archivo</p>
+                                <p class="grey-text">Formatos: JPG, PNG, GIF, WEBP (Max. 10MB)</p>
+                                <input type="file" id="productImage" accept="image/*" style="display: none;">
+                            </div>
+                            
+                            <div class="preview-container" id="imagePreviewContainer" style="display: none;">
+                                <h6>Vista previa:</h6>
+                                <img id="imagePreview" class="image-preview" src="" alt="Vista previa">
+                                <div style="margin-top: 10px;">
+                                    <button type="button" class="btn-small waves-effect waves-light red" onclick="removeImage()">
+                                        <i class="material-icons left">delete</i>
+                                        Eliminar imagen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Información de envío -->
+                        <div class="col s12">
+                            <h5><i class="material-icons left">local_shipping</i>Información de envío</h5>
+                            <div class="divider" style="margin: 15px 0;"></div>
+                        </div>
+                        
+                        <div class="input-field col s12 m6">
+                            <i class="material-icons prefix">fitness_center</i>
+                            <input id="productWeight" type="number" step="0.01" min="0" value="0.5">
+                            <label for="productWeight">Peso (kg)</label>
+                            <span class="helper-text">Peso aproximado para envío</span>
+                        </div>
+                        
+                        <div class="input-field col s12 m6">
+                            <i class="material-icons prefix">aspect_ratio</i>
+                            <input id="productDimensions" type="text" placeholder="Ej: 20x15x10">
+                            <label for="productDimensions">Dimensiones (cm)</label>
+                            <span class="helper-text">Largo × Ancho × Alto</span>
+                        </div>
+                        
+                        <!-- Información del vendedor -->
+                        <div class="col s12">
+                            <h5><i class="material-icons left">person</i>Información del vendedor</h5>
+                            <div class="divider" style="margin: 15px 0;"></div>
+                        </div>
+                        
+                        <div class="input-field col s12">
+                            <i class="material-icons prefix">badge</i>
+                            <select id="productOwner" class="validate">
+                                <option value="" selected>Sin usuario asignado</option>
+                                <!-- Se llena dinámicamente -->
+                            </select>
+                            <label>Usuario responsable</label>
+                            <span class="helper-text">El usuario que será dueño de este producto (opcional)</span>
+                        </div>
+                        
+                        <!-- Requisitos y validaciones -->
+                        <div class="col s12">
+                            <div class="requirements-list">
+                                <h6><i class="material-icons left">check_circle</i>Requisitos del producto</h6>
+                                <ul class="browser-default">
+                                    <li>El nombre debe tener al menos 3 caracteres</li>
+                                    <li>El precio debe ser mayor a $0.01</li>
+                                    <li>La cantidad debe ser 0 o más</li>
+                                    <li>La imagen debe ser menor a 10MB</li>
+                                    <li>Solo se aceptan formatos de imagen: JPG, PNG, GIF, WEBP</li>
+                                </ul>
+                            </div>
+                        </div>
+                        
+                        <!-- Botones de acción -->
+                        <div class="col s12 form-actions">
+                            <div class="row" style="margin-bottom: 0;">
+                                <div class="col s6">
+                                    <a href="/catalogo" class="btn waves-effect waves-light grey">
+                                        <i class="material-icons left">cancel</i>
+                                        Cancelar
+                                    </a>
+                                </div>
+                                <div class="col s6 right-align">
+                                    <button type="submit" class="btn waves-effect waves-light blue" id="submitBtn">
+                                        <i class="material-icons left">check</i>
+                                        Crear Producto
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de confirmación -->
+<div id="confirmationModal" class="modal">
+    <div class="modal-content">
+        <h4><i class="material-icons left blue-text">check_circle</i>Confirmar creación</h4>
+        <p>¿Estás seguro de que quieres crear este producto con los siguientes datos?</p>
+        
+        <div class="row" id="confirmationDetails">
+            <!-- Se llena dinámicamente -->
+        </div>
+    </div>
+    <div class="modal-footer">
+        <a href="#!" class="modal-close btn-flat">Cancelar</a>
+        <button class="modal-close btn waves-effect waves-light blue" onclick="confirmCreateProduct()">
+            <i class="material-icons left">check</i>
+            Sí, crear producto
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Variables globales
+let selectedImage = null;
+let productData = {};
+let usersList = [];
+
+// Inicializar al cargar la página
+document.addEventListener('DOMContentLoaded', function() {
+    loadUsers();
+    initializeEventListeners();
+    initializeMaterialize();
+});
+
+// Inicializar componentes de Materialize
+function initializeMaterialize() {
+    const textarea = document.getElementById('productDescription');
+    M.CharacterCounter.init(textarea);
+    
+    const select = document.getElementById('productOwner');
+    M.FormSelect.init(select);
+    
+    const modals = document.querySelectorAll('.modal');
+    M.Modal.init(modals);
+}
+
+// Cargar lista de usuarios para el select
+async function loadUsers() {
+    try {
+        const response = await fetch('/api/users');
+        if (response.ok) {
+            usersList = await response.json();
+            populateUserSelect();
+        }
+    } catch (error) {
+        console.error('Error cargando usuarios:', error);
+    }
+}
+
+// Llenar select con usuarios
+function populateUserSelect() {
+    const select = document.getElementById('productOwner');
+    select.innerHTML = '<option value="" selected>Sin usuario asignado</option>';
+    
+    // Mostrar TODOS los usuarios, no solo vendors/admins
+    if (usersList.length === 0) {
+        select.innerHTML += '<option value="" disabled>No hay usuarios disponibles</option>';
+        return;
+    }
+    
+    usersList.forEach(user => {
+        const option = document.createElement('option');
+        option.value = user.id;
+        option.textContent = `${user.username} (${user.role})`;
+        select.appendChild(option);
+    });
+    
+    // Si solo hay un usuario, seleccionarlo automáticamente
+    if (usersList.length === 1) {
+        select.value = usersList[0].id;
+        M.FormSelect.init(select);
+    }
+}
+
+// Inicializar event listeners
+function initializeEventListeners() {
+    const imageUploadArea = document.getElementById('imageUploadArea');
+    const imageInput = document.getElementById('productImage');
+    
+    // Click en área de upload
+    imageUploadArea.addEventListener('click', function() {
+        imageInput.click();
+    });
+    
+    // Cambio en input de archivo
+    imageInput.addEventListener('change', handleImageSelect);
+    
+    // Drag and drop
+    imageUploadArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        imageUploadArea.classList.add('dragover');
+    });
+    
+    imageUploadArea.addEventListener('dragleave', function() {
+        imageUploadArea.classList.remove('dragover');
+    });
+    
+    imageUploadArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        imageUploadArea.classList.remove('dragover');
+        
+        if (e.dataTransfer.files.length) {
+            handleImageFile(e.dataTransfer.files[0]);
+        }
+    });
+    
+    // Submit del formulario
+    document.getElementById('createProductForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        validateAndPreview();
+    });
+    
+    // Actualizar indicador de stock
+    document.getElementById('productQuantity').addEventListener('input', updateStockIndicator);
+}
+
+// Manejar selección de imagen
+function handleImageSelect(e) {
+    if (e.target.files.length) {
+        handleImageFile(e.target.files[0]);
+    }
+}
+
+// Manejar archivo de imagen
+function handleImageFile(file) {
+    // Validar tipo de archivo
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+        M.toast({
+            html: 'Formato de imagen no válido. Usa JPG, PNG, GIF o WEBP',
+            classes: 'red'
+        });
+        return;
+    }
+    
+    // Validar tamaño (10MB máximo)
+    const maxSize = 10 * 1024 * 1024; // 10MB en bytes
+    if (file.size > maxSize) {
+        M.toast({
+            html: 'Imagen demasiado grande. Máximo 10MB',
+            classes: 'red'
+        });
+        return;
+    }
+    
+    selectedImage = file;
+    
+    // Mostrar vista previa
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const preview = document.getElementById('imagePreview');
+        preview.src = e.target.result;
+        document.getElementById('imagePreviewContainer').style.display = 'block';
+        document.getElementById('imageUploadArea').style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+}
+
+// Eliminar imagen seleccionada
+function removeImage() {
+    selectedImage = null;
+    document.getElementById('productImage').value = '';
+    document.getElementById('imagePreviewContainer').style.display = 'none';
+    document.getElementById('imageUploadArea').style.display = 'block';
+}
+
+// Actualizar indicador de stock
+function updateStockIndicator() {
+    const quantity = parseInt(document.getElementById('productQuantity').value) || 0;
+    const indicator = document.createElement('span');
+    
+    if (quantity === 0) {
+        indicator.className = 'stock-indicator red';
+        indicator.textContent = 'Sin stock';
+        indicator.title = 'El producto no estará disponible para compra';
+    } else if (quantity < 10) {
+        indicator.className = 'stock-indicator stock-low';
+        indicator.textContent = `Stock bajo (${quantity})`;
+        indicator.title = 'Considera reponer stock pronto';
+    } else {
+        indicator.className = 'stock-indicator stock-ok';
+        indicator.textContent = `Stock suficiente (${quantity})`;
+        indicator.title = 'Stock adecuado para ventas';
+    }
+    
+    // Actualizar o agregar indicador
+    const label = document.querySelector('label[for="productQuantity"]');
+    const existingIndicator = label.querySelector('.stock-indicator');
+    if (existingIndicator) {
+        existingIndicator.replaceWith(indicator);
+    } else {
+        label.appendChild(indicator);
+    }
+}
+
+// Validar y mostrar vista previa
+function validateAndPreview() {
+    // Obtener valores del formulario
+    const name = document.getElementById('productName').value.trim();
+    const price = parseFloat(document.getElementById('productPrice').value);
+    const description = document.getElementById('productDescription').value.trim();
+    const quantity = parseInt(document.getElementById('productQuantity').value) || 0;
+    const requiresShipping = document.getElementById('requiresShipping').checked;
+    const weight = parseFloat(document.getElementById('productWeight').value) || 0.5;
+    const dimensions = document.getElementById('productDimensions').value.trim();
+    const ownerId = document.getElementById('productOwner').value;
+    
+    // Validaciones
+    const errors = [];
+    
+    if (!name || name.length < 3) {
+        errors.push('El nombre debe tener al menos 3 caracteres');
+    }
+    
+    if (!price || price <= 0) {
+        errors.push('El precio debe ser mayor a 0');
+    }
+    
+    if (quantity < 0) {
+        errors.push('La cantidad no puede ser negativa');
+    }
+    
+    // ELIMINADA la validación de ownerId (ahora es opcional)
+    // if (!ownerId) {
+    //     errors.push('Debes seleccionar un vendedor');
+    // }
+    
+    if (selectedImage) {
+        // Ya validamos el archivo cuando se seleccionó
+    }
+    
+    if (errors.length > 0) {
+        showError(errors.join('<br>'));
+        return;
+    }
+    
+    // Guardar datos para confirmación
+    productData = {
+        name,
+        price,
+        description,
+        quantity,
+        requiresShipping,
+        weight,
+        dimensions,
+        ownerId,
+        image: selectedImage
+    };
+    
+    // Mostrar modal de confirmación
+    showConfirmationModal();
+}
+
+// Mostrar modal de confirmación
+function showConfirmationModal() {
+    const modal = document.getElementById('confirmationModal');
+    const details = document.getElementById('confirmationDetails');
+    
+    let imageInfo = '';
+    if (productData.image) {
+        imageInfo = `
+            <div class="col s12">
+                <p><strong>Imagen:</strong> ${productData.image.name} (${(productData.image.size / 1024 / 1024).toFixed(2)} MB)</p>
+            </div>
+        `;
+    }
+    
+    let shippingInfo = productData.requiresShipping ? 
+        `Sí (${productData.weight} kg${productData.dimensions ? ', ' + productData.dimensions + ' cm' : ''})` : 
+        'No (producto digital/servicio)';
+    
+    let stockStatus = productData.quantity === 0 ? 
+        '<span class="red-text">SIN STOCK</span>' : 
+        productData.quantity < 10 ? 
+        `<span class="orange-text">BAJO (${productData.quantity})</span>` : 
+        `<span class="green-text">SUFICIENTE (${productData.quantity})</span>`;
+    
+    let ownerInfo = '';
+    if (productData.ownerId) {
+        const selectedUser = usersList.find(u => u.id == productData.ownerId);
+        if (selectedUser) {
+            ownerInfo = `<p><strong>Usuario asignado:</strong> ${selectedUser.username} (${selectedUser.role})</p>`;
+        }
+    } else {
+        ownerInfo = '<p><strong>Usuario asignado:</strong> Sin usuario asignado</p>';
+    }
+    
+    details.innerHTML = `
+        <div class="row">
+            <div class="col s12 m6">
+                <p><strong>Nombre:</strong> ${productData.name}</p>
+                <p><strong>Precio:</strong> $${productData.price.toFixed(2)}</p>
+                <p><strong>Descripción:</strong> ${productData.description || 'No especificada'}</p>
+            </div>
+            <div class="col s12 m6">
+                <p><strong>Cantidad:</strong> ${productData.quantity} ${stockStatus}</p>
+                <p><strong>Requiere envío:</strong> ${shippingInfo}</p>
+                ${ownerInfo}
+            </div>
+            ${imageInfo}
+        </div>
+    `;
+    
+    const modalInstance = M.Modal.getInstance(modal) || M.Modal.init(modal);
+    modalInstance.open();
+}
+
+// Confirmar creación del producto
+function confirmCreateProduct() {
+    createProduct();
+}
+
+// Crear producto (llamada a API)
+async function createProduct() {
+    try {
+        showLoading('Creando producto...');
+        
+        // Crear FormData
+        const formData = new FormData();
+        formData.append('name', productData.name);
+        formData.append('price', productData.price.toString());
+        formData.append('description', productData.description || '');
+        formData.append('quantity', productData.quantity.toString());
+        formData.append('requires_shipping', productData.requiresShipping.toString());
+        
+        // Solo agregar si tiene valor
+        if (productData.weight && productData.weight > 0) {
+            formData.append('weight_kg', productData.weight.toString());
+        }
+        
+        if (productData.dimensions) {
+            formData.append('dimensions_cm', productData.dimensions);
+        }
+        
+        if (productData.ownerId) {
+            formData.append('owner_id', productData.ownerId.toString());
+        }
+        
+        if (productData.image) {
+            formData.append('image_file', productData.image);
+        }
+        
+        // Debug: Mostrar lo que se envía
+        console.log('📤 Enviando FormData:');
+        for (let [key, value] of formData.entries()) {
+            console.log(`  ${key}: ${value}`);
+        }
+        
+        // Enviar petición
+        const response = await fetch('/api/products/create', {
+            method: 'POST',
+            body: formData
+        });
+        
+        console.log('📥 Respuesta recibida:', response.status);
+        
+        if (response.ok) {
+            const result = await response.json();
+            console.log('✅ Resultado:', result);
+            showSuccess(result);
+        } else {
+            const error = await response.json();
+            console.error('❌ Error del servidor:', error);
+            throw new Error(error.detail || 'Error creando producto');
+        }
+        
+    } catch (error) {
+        console.error('❌ Error:', error);
+        showError(error.message || 'Error desconocido al crear producto');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Mostrar mensaje de éxito
+function showSuccess(result) {
+    const successDiv = document.getElementById('successMessage');
+    const errorDiv = document.getElementById('errorMessage');
+    const form = document.getElementById('createProductForm');
+    
+    errorDiv.style.display = 'none';
+    
+    let imageInfo = '';
+    if (result.image_uploaded) {
+        imageInfo = 'Imagen subida correctamente.';
+    }
+    
+    document.getElementById('successDetails').innerHTML = `
+        <p><strong>Producto:</strong> ${result.product.name}</p>
+        <p><strong>ID:</strong> ${result.product.id}</p>
+        <p><strong>Precio:</strong> $${result.product.price.toFixed(2)}</p>
+        <p><strong>Stock:</strong> ${result.product.quantity} unidades</p>
+        <p>${imageInfo}</p>
+    `;
+    
+    successDiv.style.display = 'block';
+    form.style.display = 'none';
+    
+    // Scroll hacia el mensaje de éxito
+    successDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Mostrar mensaje de error
+function showError(message) {
+    const successDiv = document.getElementById('successMessage');
+    const errorDiv = document.getElementById('errorMessage');
+    
+    successDiv.style.display = 'none';
+    document.getElementById('errorDetails').textContent = message;
+    errorDiv.style.display = 'block';
+    
+    // Scroll hacia el mensaje de error
+    errorDiv.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Resetear formulario
+function resetForm() {
+    document.getElementById('createProductForm').reset();
+    document.getElementById('createProductForm').style.display = 'block';
+    document.getElementById('successMessage').style.display = 'none';
+    document.getElementById('errorMessage').style.display = 'none';
+    
+    removeImage();
+    updateStockIndicator();
+    
+    // Reinicializar selects
+    const select = document.getElementById('productOwner');
+    M.FormSelect.init(select);
+    
+    // Scroll al inicio
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Mostrar loading
+function showLoading(message = 'Procesando...') {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    document.getElementById('loadingMessage').textContent = message;
+}
+
+// Ocultar loading
+function hideLoading() {
+    document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+// Agregar enlace en el navbar (opcional)
+function addNavbarLink() {
+    // Esto agregaría automáticamente el enlace al navbar
+    // Puedes hacerlo manualmente editando base.html
+    const nav = document.getElementById('nav-mobile');
+    if (nav) {
+        const newItem = document.createElement('li');
+        newItem.innerHTML = '<a href="/crear-producto"><i class="material-icons left">add_box</i>Crear Producto</a>';
+        nav.appendChild(newItem);
+    }
+}
+
+// Llamar a addNavbarLink si quieres agregar el enlace automáticamente
+// addNavbarLink();
+</script>
+{% endblock %}

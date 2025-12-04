@@ -1,0 +1,485 @@
+{% extends "base.html" %}
+
+{% block title %}Seguimiento de Envíos{% endblock %}
+
+{% block head %}
+<style>
+    .tracking-card {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .tracking-header {
+        background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+        color: white;
+        padding: 20px;
+        border-radius: 10px 10px 0 0;
+    }
+    .tracking-timeline {
+        position: relative;
+        padding: 20px 0;
+    }
+    .timeline-item {
+        display: flex;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .timeline-dot {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #2196f3;
+        margin-right: 15px;
+        position: relative;
+        z-index: 1;
+    }
+    .timeline-content {
+        flex: 1;
+        padding: 10px 15px;
+        background: #f5f5f5;
+        border-radius: 5px;
+    }
+    .timeline-line {
+        position: absolute;
+        left: 10px;
+        top: 20px;
+        bottom: -20px;
+        width: 2px;
+        background: #2196f3;
+    }
+    .timeline-item:last-child .timeline-line {
+        display: none;
+    }
+    .status-completed .timeline-dot {
+        background: #4caf50;
+    }
+    .status-pending .timeline-dot {
+        background: #ff9800;
+    }
+    .status-cancelled .timeline-dot {
+        background: #f44336;
+    }
+    .empty-tracking {
+        text-align: center;
+        padding: 50px 20px;
+    }
+    .empty-tracking i {
+        font-size: 5rem;
+        color: #ddd;
+        margin-bottom: 20px;
+    }
+    .tracking-search {
+        margin-bottom: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">local_shipping</i>
+            Seguimiento de Envíos
+        </h4>
+        <p class="grey-text">Rastrea el estado de tus paquetes en tiempo real</p>
+    </div>
+</div>
+
+<!-- Buscador de tracking -->
+<div class="row tracking-search">
+    <div class="col s12">
+        <div class="card-panel blue lighten-5">
+            <h5>Buscar envío</h5>
+            <div class="row" style="margin-bottom: 0;">
+                <div class="col s12 m8">
+                    <div class="input-field">
+                        <input type="text" id="trackingNumber" placeholder="Ingresa tu número de seguimiento">
+                        <label for="trackingNumber">Número de tracking</label>
+                    </div>
+                </div>
+                <div class="col s12 m4">
+                    <button class="btn waves-effect waves-light blue" onclick="trackShipment()" style="margin-top: 20px; width: 100%;">
+                        <i class="material-icons left">search</i>
+                        Rastrear envío
+                    </button>
+                </div>
+            </div>
+            <p class="grey-text">Ejemplo: DHL1234567890, UPS9876543210</p>
+        </div>
+    </div>
+</div>
+
+<!-- Mis envíos (si está logueado) -->
+<div class="row" id="myShipmentsSection" style="display: none;">
+    <div class="col s12">
+        <h5><i class="material-icons left">list</i>Mis envíos activos</h5>
+        <div id="myShipments">
+            <!-- Se carga dinámicamente -->
+        </div>
+    </div>
+</div>
+
+<!-- Resultado de tracking -->
+<div class="row" id="trackingResult" style="display: none;">
+    <div class="col s12">
+        <div class="tracking-card">
+            <div class="tracking-header">
+                <div class="row" style="margin-bottom: 0;">
+                    <div class="col s8">
+                        <h5 id="trackingTitle">Seguimiento de envío</h5>
+                        <p id="trackingSubtitle">Código: <span id="trackingCode"></span></p>
+                    </div>
+                    <div class="col s4 right-align">
+                        <h5 id="trackingStatus">Estado</h5>
+                        <p id="carrierInfo">Transportista</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row" style="margin-top: 20px;">
+                <div class="col s12 m6">
+                    <h6>Información del envío</h6>
+                    <p><strong>Transportista:</strong> <span id="infoCarrier"></span></p>
+                    <p><strong>Peso:</strong> <span id="infoWeight"></span></p>
+                    <p><strong>Paquetes:</strong> <span id="infoPackages"></span></p>
+                    <p><strong>Costo:</strong> <span id="infoCost"></span></p>
+                </div>
+                <div class="col s12 m6">
+                    <h6>Información de entrega</h6>
+                    <p><strong>Destinatario:</strong> <span id="infoRecipient"></span></p>
+                    <p><strong>Dirección:</strong> <span id="infoAddress"></span></p>
+                    <p><strong>Teléfono:</strong> <span id="infoPhone"></span></p>
+                    <p><strong>Entrega estimada:</strong> <span id="infoDelivery"></span></p>
+                </div>
+            </div>
+            
+            <div class="divider" style="margin: 20px 0;"></div>
+            
+            <h6>Historial de seguimiento</h6>
+            <div class="tracking-timeline" id="trackingTimeline">
+                <!-- La línea de tiempo se genera dinámicamente -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estado vacío -->
+<div class="row" id="emptyTracking">
+    <div class="col s12 empty-tracking">
+        <i class="material-icons">local_shipping</i>
+        <h5>No hay envíos para mostrar</h5>
+        <p>Ingresa un número de tracking o inicia sesión para ver tus envíos.</p>
+        <a href="/catalogo" class="btn waves-effect waves-light blue">
+            <i class="material-icons left">store</i>
+            Realizar una compra
+        </a>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Cargar envíos del usuario al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.authManager && window.authManager.isAuthenticated()) {
+        loadMyShipments();
+    } else {
+        showEmptyTracking();
+    }
+});
+
+// Cargar envíos del usuario
+async function loadMyShipments() {
+    try {
+        const response = await fetch('/api/shipping/shipments');
+        if (response.ok) {
+            const shipments = await response.json();
+            
+            if (shipments.length > 0) {
+                renderMyShipments(shipments);
+                document.getElementById('myShipmentsSection').style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('Error cargando envíos:', error);
+        // No mostrar error si no tiene permisos
+    }
+}
+
+// Renderizar envíos del usuario
+function renderMyShipments(shipments) {
+    const container = document.getElementById('myShipments');
+    container.innerHTML = '';
+    
+    shipments.slice(0, 3).forEach(shipment => {
+        const statusClass = `status-${shipment.status}`;
+        const statusText = {
+            'pending': 'Pendiente',
+            'processing': 'Procesando',
+            'in_transit': 'En tránsito',
+            'out_for_delivery': 'En reparto',
+            'delivered': 'Entregado',
+            'cancelled': 'Cancelado'
+        }[shipment.status] || shipment.status;
+        
+        const deliveryDate = shipment.estimated_delivery_end 
+            ? new Date(shipment.estimated_delivery_end).toLocaleDateString('es-ES')
+            : 'Por confirmar';
+        
+        container.innerHTML += `
+            <div class="card" style="margin-bottom: 10px;">
+                <div class="card-content">
+                    <div class="row" style="margin-bottom: 0;">
+                        <div class="col s8">
+                            <span class="card-title">
+                                ${shipment.tracking_number}
+                            </span>
+                            <p>Orden #${shipment.order_id} • ${deliveryDate}</p>
+                        </div>
+                        <div class="col s4 right-align">
+                            <span class="badge ${statusClass}">${statusText}</span>
+                            <button class="btn-small waves-effect waves-light blue" onclick="trackShipmentNumber('${shipment.tracking_number}')">
+                                <i class="material-icons">visibility</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    if (shipments.length > 3) {
+        container.innerHTML += `
+            <div class="center-align" style="margin-top: 15px;">
+                <a href="#" class="btn waves-effect waves-light blue" onclick="viewAllShipments()">
+                    <i class="material-icons left">list</i>
+                    Ver todos los envíos (${shipments.length})
+                </a>
+            </div>
+        `;
+    }
+}
+
+// Rastrear envío (desde input)
+async function trackShipment() {
+    const trackingNumber = document.getElementById('trackingNumber').value.trim();
+    
+    if (!trackingNumber) {
+        M.toast({
+            html: 'Ingresa un número de tracking',
+            classes: 'orange'
+        });
+        return;
+    }
+    
+    await trackShipmentNumber(trackingNumber);
+}
+
+// Rastrear envío por número
+async function trackShipmentNumber(trackingNumber) {
+    try {
+        showLoading(true);
+        
+        const response = await fetch(`/api/shipping/track/${trackingNumber}`);
+        
+        if (response.status === 404) {
+            M.toast({
+                html: 'Número de tracking no encontrado',
+                classes: 'red'
+            });
+            showEmptyTracking();
+            return;
+        }
+        
+        if (!response.ok) {
+            throw new Error('Error buscando envío');
+        }
+        
+        const shipment = await response.json();
+        renderTrackingResult(shipment);
+        
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: 'Error: ' + error.message,
+            classes: 'red'
+        });
+        showEmptyTracking();
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Renderizar resultado de tracking
+function renderTrackingResult(shipment) {
+    // Ocultar estado vacío
+    document.getElementById('emptyTracking').style.display = 'none';
+    document.getElementById('trackingResult').style.display = 'block';
+    
+    // Actualizar información principal
+    document.getElementById('trackingCode').textContent = shipment.tracking_number;
+    document.getElementById('trackingStatus').textContent = formatStatus(shipment.status);
+    document.getElementById('trackingStatus').className = `status-${shipment.status}`;
+    document.getElementById('carrierInfo').textContent = shipment.carrier || 'No especificado';
+    
+    // Actualizar información detallada
+    document.getElementById('infoCarrier').textContent = shipment.carrier || 'No especificado';
+    document.getElementById('infoWeight').textContent = shipment.weight_kg ? `${shipment.weight_kg} kg` : 'No especificado';
+    document.getElementById('infoPackages').textContent = shipment.package_count || 1;
+    document.getElementById('infoCost').textContent = shipment.total_cost ? `$${shipment.total_cost.toFixed(2)}` : 'No especificado';
+    
+    if (shipment.address) {
+        document.getElementById('infoRecipient').textContent = shipment.address.full_name || 'No especificado';
+        document.getElementById('infoAddress').textContent = 
+            `${shipment.address.address_line1}, ${shipment.address.city}`;
+        document.getElementById('infoPhone').textContent = shipment.address.phone_number || 'No especificado';
+    }
+    
+    if (shipment.estimated_delivery_end) {
+        const date = new Date(shipment.estimated_delivery_end).toLocaleDateString('es-ES', {
+            weekday: 'long',
+            day: 'numeric',
+            month: 'long'
+        });
+        document.getElementById('infoDelivery').textContent = date;
+    } else {
+        document.getElementById('infoDelivery').textContent = 'Por confirmar';
+    }
+    
+    // Renderizar línea de tiempo
+    renderTimeline(shipment);
+}
+
+// Renderizar línea de tiempo
+function renderTimeline(shipment) {
+    const timeline = document.getElementById('trackingTimeline');
+    timeline.innerHTML = '';
+    
+    const events = shipment.tracking_events || [];
+    
+    // Eventos por defecto si no hay eventos
+    if (events.length === 0) {
+        const defaultEvents = [
+            {
+                status: 'created',
+                description: 'Envío creado',
+                date: shipment.created_at,
+                location: 'Sistema'
+            }
+        ];
+        
+        if (shipment.status !== 'pending') {
+            defaultEvents.push({
+                status: 'processing',
+                description: 'Procesado en almacén',
+                date: new Date(new Date(shipment.created_at).getTime() + 2*60*60*1000).toISOString(),
+                location: 'Centro de distribución'
+            });
+        }
+        
+        if (shipment.status === 'in_transit' || shipment.status === 'out_for_delivery' || shipment.status === 'delivered') {
+            defaultEvents.push({
+                status: 'in_transit',
+                description: 'Enviado al destino',
+                date: shipment.shipped_at || new Date(new Date(shipment.created_at).getTime() + 24*60*60*1000).toISOString(),
+                location: 'En tránsito'
+            });
+        }
+        
+        if (shipment.status === 'out_for_delivery' || shipment.status === 'delivered') {
+            defaultEvents.push({
+                status: 'out_for_delivery',
+                description: 'En reparto',
+                date: new Date(new Date(shipment.shipped_at || shipment.created_at).getTime() + 48*60*60*1000).toISOString(),
+                location: shipment.address ? shipment.address.city : 'Ciudad destino'
+            });
+        }
+        
+        if (shipment.status === 'delivered') {
+            defaultEvents.push({
+                status: 'delivered',
+                description: 'Entregado',
+                date: shipment.delivered_at || new Date(new Date(shipment.created_at).getTime() + 72*60*60*1000).toISOString(),
+                location: shipment.address ? shipment.address.address_line1 : 'Destino'
+            });
+        }
+        
+        events.push(...defaultEvents);
+    }
+    
+    // Ordenar eventos por fecha
+    events.sort((a, b) => new Date(a.date || a.timestamp) - new Date(b.date || b.timestamp));
+    
+    // Renderizar cada evento
+    events.forEach((event, index) => {
+        const date = new Date(event.date || event.timestamp);
+        const formattedDate = date.toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        
+        timeline.innerHTML += `
+            <div class="timeline-item status-${event.status}">
+                <div class="timeline-dot"></div>
+                <div class="timeline-content">
+                    <strong>${event.description}</strong>
+                    <p style="margin: 5px 0;">${formattedDate}</p>
+                    <small class="grey-text">${event.location || ''}</small>
+                </div>
+                ${index < events.length - 1 ? '<div class="timeline-line"></div>' : ''}
+            </div>
+        `;
+    });
+}
+
+// Formatear estado
+function formatStatus(status) {
+    const statusMap = {
+        'pending': 'Pendiente',
+        'processing': 'Procesando',
+        'in_transit': 'En tránsito',
+        'out_for_delivery': 'En reparto',
+        'delivered': 'Entregado',
+        'cancelled': 'Cancelado'
+    };
+    return statusMap[status] || status;
+}
+
+// Ver todos los envíos
+function viewAllShipments() {
+    M.toast({
+        html: 'Redirigiendo a página completa de envíos (en desarrollo)',
+        classes: 'blue'
+    });
+    // Por implementar: página completa de envíos
+}
+
+// Mostrar estado vacío
+function showEmptyTracking() {
+    document.getElementById('emptyTracking').style.display = 'block';
+    document.getElementById('trackingResult').style.display = 'none';
+}
+
+// Mostrar/ocultar loading
+function showLoading(show) {
+    const loader = document.getElementById('loadingOrders') || document.createElement('div');
+    if (show) {
+        loader.style.display = 'block';
+    } else {
+        loader.style.display = 'none';
+    }
+}
+
+// Permitir Enter para buscar
+document.getElementById('trackingNumber').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        trackShipment();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,383 @@
+{% extends "base.html" %}
+
+{% block title %}Usuarios - Tienda Virtual{% endblock %}
+
+{% block head %}
+<style>
+    .user-card {
+        margin-bottom: 15px;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .user-header {
+        padding: 15px;
+        display: flex;
+        align-items: center;
+    }
+    .user-avatar {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: #2196f3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 15px;
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+    }
+    .user-info {
+        flex: 1;
+    }
+    .user-role {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        margin-top: 5px;
+    }
+    .role-admin { background: #f44336; color: white; }
+    .role-vendor { background: #4caf50; color: white; }
+    .role-customer { background: #2196f3; color: white; }
+    .user-stats {
+        display: flex;
+        justify-content: space-around;
+        padding: 10px;
+        background: #f5f5f5;
+        border-top: 1px solid #eee;
+    }
+    .stat-item {
+        text-align: center;
+    }
+    .stat-value {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #2196f3;
+    }
+    .stat-label {
+        font-size: 0.8rem;
+        color: #666;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">
+            <i class="material-icons left">people</i>
+            Usuarios del Sistema
+        </h4>
+        <p class="grey-text">Lista de todos los usuarios registrados</p>
+    </div>
+</div>
+
+<!-- Botones de acción -->
+<div class="row">
+    <div class="col s12">
+        <div class="card-panel blue lighten-5">
+            <div class="row" style="margin-bottom: 0;">
+                <div class="col s12 m6">
+                    <a href="/registro" class="btn waves-effect waves-light blue">
+                        <i class="material-icons left">person_add</i>
+                        Crear Nuevo Usuario
+                    </a>
+                </div>
+                <div class="col s12 m6 right-align">
+                    <button class="btn waves-effect waves-light green" onclick="loadUsers()">
+                        <i class="material-icons left">refresh</i>
+                        Actualizar Lista
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estadísticas -->
+<div class="row">
+    <div class="col s12">
+        <div class="card">
+            <div class="card-content">
+                <h5>Estadísticas</h5>
+                <div class="row center-align" id="statsContainer">
+                    <!-- Se carga dinámicamente -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loading -->
+<div class="row" id="loadingUsers">
+    <div class="col s12 center-align">
+        <div class="preloader-wrapper big active">
+            <div class="spinner-layer spinner-blue-only">
+                <div class="circle-clipper left">
+                    <div class="circle"></div>
+                </div>
+                <div class="gap-patch">
+                    <div class="circle"></div>
+                </div>
+                <div class="circle-clipper right">
+                    <div class="circle"></div>
+                </div>
+            </div>
+        </div>
+        <p>Cargando usuarios...</p>
+    </div>
+</div>
+
+<!-- Lista de usuarios -->
+<div class="row" id="usersList"></div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let allUsers = [];
+
+// Cargar usuarios al iniciar
+document.addEventListener('DOMContentLoaded', function() {
+    loadUsers();
+    loadStats();
+});
+
+// Cargar lista de usuarios
+async function loadUsers() {
+    try {
+        showLoading(true);
+        
+        const response = await fetch('/api/users');
+        
+        if (!response.ok) {
+            throw new Error('Error cargando usuarios');
+        }
+        
+        allUsers = await response.json();
+        renderUsers();
+        
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: 'Error cargando usuarios: ' + error.message,
+            classes: 'red'
+        });
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Cargar estadísticas
+async function loadStats() {
+    try {
+        const response = await fetch('/api/users/stats');
+        if (response.ok) {
+            const stats = await response.json();
+            renderStats(stats);
+        }
+    } catch (error) {
+        console.error('Error cargando estadísticas:', error);
+    }
+}
+
+// Renderizar usuarios
+function renderUsers() {
+    const container = document.getElementById('usersList');
+    container.innerHTML = '';
+    
+    if (allUsers.length === 0) {
+        container.innerHTML = `
+            <div class="col s12">
+                <div class="card-panel yellow lighten-4">
+                    <p class="center-align">No hay usuarios registrados todavía</p>
+                    <div class="center-align" style="margin-top: 15px;">
+                        <a href="/registro" class="btn waves-effect waves-light blue">
+                            <i class="material-icons left">person_add</i>
+                            Crear Primer Usuario
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    allUsers.forEach(user => {
+        const roleClass = `role-${user.role}`;
+        const roleName = {
+            'admin': 'Administrador',
+            'vendor': 'Vendedor',
+            'customer': 'Cliente'
+        }[user.role] || user.role;
+        
+        const createdAt = new Date(user.created_at).toLocaleDateString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+        
+        const initial = user.username.charAt(0).toUpperCase();
+        const productCount = user.products ? user.products.length : 0;
+        
+        container.innerHTML += `
+            <div class="col s12 m6 l4">
+                <div class="card user-card">
+                    <div class="user-header">
+                        <div class="user-avatar">
+                            ${initial}
+                        </div>
+                        <div class="user-info">
+                            <h6 style="margin: 0 0 5px 0;">
+                                <strong>${user.username}</strong>
+                                ${user.is_superuser ? '<i class="material-icons tiny red-text" title="Superusuario">star</i>' : ''}
+                            </h6>
+                            <p style="margin: 0 0 5px 0; color: #666;">
+                                <small>ID: ${user.id} • ${createdAt}</small>
+                            </p>
+                            <span class="user-role ${roleClass}">${roleName}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="user-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">${productCount}</div>
+                            <div class="stat-label">Productos</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">${user.role.charAt(0).toUpperCase()}</div>
+                            <div class="stat-label">Rol</div>
+                        </div>
+                        <div class="stat-item">
+                            <button class="btn-flat blue-text" onclick="viewUserDetails(${user.id})" title="Ver detalles">
+                                <i class="material-icons">visibility</i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+}
+
+// Renderizar estadísticas
+function renderStats(stats) {
+    const container = document.getElementById('statsContainer');
+    
+    container.innerHTML = `
+        <div class="col s6 m3">
+            <div class="stat-item">
+                <div class="stat-value" style="color: #2196f3;">${stats.total_users}</div>
+                <div class="stat-label">Total Usuarios</div>
+            </div>
+        </div>
+        <div class="col s6 m3">
+            <div class="stat-item">
+                <div class="stat-value" style="color: #f44336;">${stats.admin_users}</div>
+                <div class="stat-label">Administradores</div>
+            </div>
+        </div>
+        <div class="col s6 m3">
+            <div class="stat-item">
+                <div class="stat-value" style="color: #4caf50;">${stats.vendor_users}</div>
+                <div class="stat-label">Vendedores</div>
+            </div>
+        </div>
+        <div class="col s6 m3">
+            <div class="stat-item">
+                <div class="stat-value" style="color: #ff9800;">${stats.customer_users}</div>
+                <div class="stat-label">Clientes</div>
+            </div>
+        </div>
+    `;
+}
+
+// Ver detalles de usuario
+async function viewUserDetails(userId) {
+    try {
+        const response = await fetch(`/api/users/${userId}/details`);
+        if (response.ok) {
+            const userDetails = await response.json();
+            
+            let productsHtml = '';
+            if (userDetails.products_info.products.length > 0) {
+                userDetails.products_info.products.forEach(product => {
+                    productsHtml += `
+                        <tr>
+                            <td>${product.name}</td>
+                            <td>$${product.price}</td>
+                            <td>${product.quantity}</td>
+                        </tr>
+                    `;
+                });
+            } else {
+                productsHtml = '<tr><td colspan="3" class="center-align">No tiene productos</td></tr>';
+            }
+            
+            const modalHtml = `
+                <div class="modal-content">
+                    <h4>${userDetails.user_info.username}</h4>
+                    <div class="row">
+                        <div class="col s12 m6">
+                            <p><strong>ID:</strong> ${userDetails.user_info.id}</p>
+                            <p><strong>Rol:</strong> ${userDetails.user_info.role}</p>
+                            <p><strong>Creado:</strong> ${new Date(userDetails.user_info.created_at).toLocaleString('es-ES')}</p>
+                            <p><strong>Superusuario:</strong> ${userDetails.user_info.is_superuser ? 'Sí' : 'No'}</p>
+                        </div>
+                        <div class="col s12 m6">
+                            <p><strong>Total productos:</strong> ${userDetails.products_info.total_products}</p>
+                            <p><strong>Valor inventario:</strong> $${userDetails.stats.total_inventory_value.toFixed(2)}</p>
+                            <p><strong>Precio promedio:</strong> $${userDetails.stats.average_product_price.toFixed(2)}</p>
+                        </div>
+                    </div>
+                    
+                    <h5>Productos</h5>
+                    <table class="striped">
+                        <thead>
+                            <tr>
+                                <th>Nombre</th>
+                                <th>Precio</th>
+                                <th>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${productsHtml}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer">
+                    <a href="#!" class="modal-close btn-flat">Cerrar</a>
+                </div>
+            `;
+            
+            // Crear modal
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.id = 'userModal';
+            modal.innerHTML = modalHtml;
+            
+            document.body.appendChild(modal);
+            
+            // Inicializar y abrir modal
+            const modalInstance = M.Modal.init(modal);
+            modalInstance.open();
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        M.toast({
+            html: 'Error cargando detalles del usuario',
+            classes: 'red'
+        });
+    }
+}
+
+// Mostrar/ocultar loading
+function showLoading(show) {
+    document.getElementById('loadingUsers').style.display = show ? 'block' : 'none';
+    document.getElementById('usersList').style.display = show ? 'none' : 'block';
+}
+</script>
+{% endblock %}

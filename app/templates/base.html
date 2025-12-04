@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Tienda Virtual{% endblock %}</title>
+
+    <!-- Materialize CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+    <!-- Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <!-- Estilos propios -->
+    <style>
+        body { 
+            background: #f5f5f5; 
+            display: flex;
+            min-height: 100vh;
+            flex-direction: column;
+        }
+        nav { padding: 0 20px; }
+        main { flex: 1 0 auto; }
+        footer { margin-top: 40px; padding: 20px 0; }
+        .brand-logo { font-weight: bold; }
+        .page-footer { padding-top: 0; }
+        .info-banner {
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .info-banner a { color: white; text-decoration: underline; }
+    </style>
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+<!-- Banner informativo -->
+<div class="info-banner">
+    <i class="material-icons tiny" style="vertical-align: middle;">info</i>
+    Sistema funcionando en <strong>modo sin autenticación</strong>. 
+    <a href="/acceder">Más información</a>
+</div>
+
+<!-- NAVBAR SIMPLIFICADO -->
+<nav class="blue darken-2">
+    <div class="nav-wrapper">
+        <a href="/" class="brand-logo">
+            <i class="material-icons left" style="margin-right: 10px;">store</i>
+            Tienda Virtual
+        </a>
+        <a href="#" data-target="mobile-nav" class="sidenav-trigger">
+            <i class="material-icons">menu</i>
+        </a>
+        <ul id="nav-mobile" class="right hide-on-med-and-down">
+            <li><a href="/catalogo"><i class="material-icons left">store</i>Catálogo</a></li>
+            <!-- NUEVO: CREAR PRODUCTO (PRIORIDAD 2) -->
+            <li><a href="/crear-producto"><i class="material-icons left">add_box</i>Crear Producto</a></li>
+            <!-- NUEVO: PANEL DE VENDEDOR (PRIORIDAD 3) -->
+            <li><a href="/panel"><i class="material-icons left">dashboard</i>Panel</a></li>
+            <li><a href="/mi-carrito"><i class="material-icons left">shopping_cart</i>Carrito</a></li>
+            <li><a href="/mis-pedidos"><i class="material-icons left">receipt</i>Pedidos</a></li>
+            <li><a href="/seguimiento"><i class="material-icons left">local_shipping</i>Seguimiento</a></li>
+            
+            <!-- Gestión de usuarios -->
+            <li><a href="/usuarios"><i class="material-icons left">people</i>Usuarios</a></li>
+            <li><a href="/registro"><i class="material-icons left">person_add</i>Crear Usuario</a></li>
+            <li><a href="/acceder"><i class="material-icons left">login</i>Acceder</a></li>
+            
+            <!-- Documentación -->
+            <li><a href="/docs" target="_blank"><i class="material-icons left">api</i>API Docs</a></li>
+        </ul>
+    </div>
+</nav>
+
+<!-- NAVBAR MÓVIL -->
+<ul class="sidenav" id="mobile-nav">
+    <!-- Tienda -->
+    <li><a href="/catalogo"><i class="material-icons">store</i>Catálogo</a></li>
+    <!-- NUEVO: CREAR PRODUCTO (PRIORIDAD 2) -->
+    <li><a href="/crear-producto"><i class="material-icons">add_box</i>Crear Producto</a></li>
+    <!-- NUEVO: PANEL DE VENDEDOR (PRIORIDAD 3) -->
+    <li><a href="/panel"><i class="material-icons">dashboard</i>Panel</a></li>
+    <li><a href="/mi-carrito"><i class="material-icons">shopping_cart</i>Carrito</a></li>
+    <li><a href="/mis-pedidos"><i class="material-icons">receipt</i>Pedidos</a></li>
+    <li><a href="/seguimiento"><i class="material-icons">local_shipping</i>Seguimiento</a></li>
+    
+    <li><div class="divider"></div></li>
+    
+    <!-- Usuarios -->
+    <li><a href="/usuarios"><i class="material-icons">people</i>Usuarios</a></li>
+    <li><a href="/registro"><i class="material-icons">person_add</i>Crear Usuario</a></li>
+    <li><a href="/acceder"><i class="material-icons">login</i>Acceder</a></li>
+    
+    <li><div class="divider"></div></li>
+    
+    <!-- Documentación -->
+    <li><a href="/docs" target="_blank"><i class="material-icons">api</i>API Docs</a></li>
+</ul>
+
+<!-- CONTENIDO -->
+<main class="container" style="margin-top: 25px; margin-bottom: 50px;">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- FOOTER -->
+<footer class="page-footer blue darken-3">
+    <div class="container">
+        <div class="row">
+            <div class="col l6 s12">
+                <h5 class="white-text">Tienda Virtual</h5>
+                <p class="grey-text text-lighten-4">
+                    Proyecto académico integrando Desarrollo de Software con Análisis de Algoritmos.
+                    Backend con FastAPI, frontend con MaterializeCSS y algoritmos personalizados.
+                    <strong>Modo sin autenticación activado</strong>
+                </p>
+            </div>
+            <div class="col l4 offset-l2 s12">
+                <h5 class="white-text">Enlaces útiles</h5>
+                <ul>
+                    <li><a class="grey-text text-lighten-3" href="/docs" target="_blank">Documentación API</a></li>
+                    <li><a class="grey-text text-lighten-3" href="/api/algorithms/sort" target="_blank">Algoritmos</a></li>
+                    <li><a class="grey-text text-lighten-3" href="/api/products/list" target="_blank">Productos API</a></li>
+                    <li><a class="grey-text text-lighten-3" href="https://fastapi.tiangolo.com/" target="_blank">FastAPI Docs</a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div class="footer-copyright">
+        <div class="container">
+            © 2025 Tienda Virtual — Proyecto Académico
+            <a class="grey-text text-lighten-4 right" href="#!">
+                <i class="material-icons left">code</i>
+                Desarrollo de Software + Análisis de Algoritmos
+            </a>
+        </div>
+    </div>
+</footer>
+
+<!-- JS Materialize -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+<!-- Auth Manager Simplificado -->
+<script src="/static/js/auth.js"></script>
+
+<!-- Script para inicializar componentes -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Inicializar todos los componentes de Materialize
+    M.AutoInit();
+    
+    // Inicializar sidenav
+    const sidenavElems = document.querySelectorAll('.sidenav');
+    M.Sidenav.init(sidenavElems);
+});
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

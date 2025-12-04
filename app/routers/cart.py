@@ -1,35 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlmodel import Session, select
-from typing import List
-import uuid
+from typing import List, Optional
 from datetime import datetime
+import uuid
+
 from ..database import get_session
-from ..models import Cart, CartItem, Product, User, Order, OrderItem
-from .auth_router import get_current_user
-from ..permissions import PermissionChecker  # ✅ Nuevo import
+from ..models import Cart, CartItem, Product, User, Order, OrderItem, ShippingAddress
 
 router = APIRouter(prefix="/cart", tags=["cart"])
+
+# Función dummy para obtener usuario actual
+def get_current_user():
+    """Retorna un usuario dummy para mantener compatibilidad"""
+    return User(
+        id=1,
+        username="anonymous",
+        hashed_password="",
+        role="customer"
+    )
 
 # ======================================================
 # 🛒 OBTENER CARRITO DEL USUARIO ACTUAL
 # ======================================================
 @router.get("/", response_model=Cart)
 def get_cart(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Obtiene el carrito de compras del usuario actual"""
-    # ✅ Usar PermissionChecker
-    # (Aunque este endpoint ya verifica por current_user, es buena práctica)
-    
+    """Obtiene el carrito de compras (público)"""
     # Buscar o crear carrito para el usuario
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
         # Crear nuevo carrito si no existe
-        cart = Cart(user_id=current_user.id)
+        cart = Cart(user_id=user_id)
         session.add(cart)
         session.commit()
         session.refresh(cart)
@@ -43,10 +49,10 @@ def get_cart(
 def add_to_cart(
     product_id: int,
     quantity: int = 1,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Agrega un producto al carrito del usuario"""
+    """Agrega un producto al carrito (público)"""
     # Verificar que el producto existe
     product = session.get(Product, product_id)
     if not product:
@@ -61,11 +67,11 @@ def add_to_cart(
     
     # Obtener o crear carrito
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
-        cart = Cart(user_id=current_user.id)
+        cart = Cart(user_id=user_id)
         session.add(cart)
         session.commit()
         session.refresh(cart)
@@ -98,19 +104,16 @@ def add_to_cart(
     return {"message": f"Producto '{product.name}' agregado al carrito"}
 
 # ======================================================
-# ➖ ACTUALIZAR CANTIDAD EN CARRITO
+# 🔄 ACTUALIZAR CANTIDAD DE PRODUCTO EN CARRITO
 # ======================================================
 @router.put("/update/{product_id}")
 def update_cart_item(
     product_id: int,
-    quantity: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    quantity: int = Query(..., ge=1, description="Nueva cantidad"),
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
     """Actualiza la cantidad de un producto en el carrito"""
-    if quantity < 1:
-        raise HTTPException(status_code=400, detail="La cantidad debe ser al menos 1")
-    
     # Verificar que el producto existe
     product = session.get(Product, product_id)
     if not product:
@@ -125,14 +128,11 @@ def update_cart_item(
     
     # Buscar carrito del usuario
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
-    
-    # ✅ Verificar permisos usando PermissionChecker
-    PermissionChecker.check_cart_view(current_user, cart.user_id)
     
     # Buscar item en el carrito
     cart_item = session.exec(
@@ -152,30 +152,31 @@ def update_cart_item(
     session.add(cart)
     session.commit()
     
-    return {"message": f"Cantidad de '{product.name}' actualizada a {quantity}"}
+    return {
+        "message": f"Cantidad de '{product.name}' actualizada a {quantity}",
+        "product_id": product_id,
+        "new_quantity": quantity
+    }
 
 # ======================================================
-# 🗑️ REMOVER PRODUCTO DEL CARRITO
+# 🗑️ ELIMINAR PRODUCTO DEL CARRITO
 # ======================================================
 @router.delete("/remove/{product_id}")
 def remove_from_cart(
     product_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Remueve un producto del carrito"""
+    """Elimina un producto del carrito"""
     # Buscar carrito del usuario
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
     
-    # ✅ Verificar permisos usando PermissionChecker
-    PermissionChecker.check_cart_view(current_user, cart.user_id)
-    
-    # Buscar item en el carrito
+    # Buscar y eliminar item del carrito
     cart_item = session.exec(
         select(CartItem)
         .where(CartItem.cart_id == cart.id)
@@ -185,38 +186,38 @@ def remove_from_cart(
     if not cart_item:
         raise HTTPException(status_code=404, detail="Producto no encontrado en el carrito")
     
-    # Eliminar item
+    product_name = session.get(Product, product_id).name if session.get(Product, product_id) else "Producto"
+    
     session.delete(cart_item)
     cart.updated_at = datetime.utcnow()
     session.add(cart)
     session.commit()
     
-    return {"message": "Producto removido del carrito"}
+    return {"message": f"'{product_name}' eliminado del carrito"}
 
 # ======================================================
-# 🧹 VACIAR CARRITO
+# 🗑️ VACIAR CARRITO COMPLETO
 # ======================================================
 @router.delete("/clear")
 def clear_cart(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Vacía todo el carrito del usuario"""
+    """Elimina todos los productos del carrito"""
     # Buscar carrito del usuario
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
         raise HTTPException(status_code=404, detail="Carrito no encontrado")
     
-    # ✅ Verificar permisos usando PermissionChecker
-    PermissionChecker.check_cart_view(current_user, cart.user_id)
-    
     # Eliminar todos los items del carrito
     cart_items = session.exec(
         select(CartItem).where(CartItem.cart_id == cart.id)
     ).all()
+    
+    deleted_count = len(cart_items)
     
     for item in cart_items:
         session.delete(item)
@@ -225,31 +226,32 @@ def clear_cart(
     session.add(cart)
     session.commit()
     
-    return {"message": "Carrito vaciado correctamente"}
+    return {
+        "message": f"Carrito vaciado. Se eliminaron {deleted_count} productos",
+        "deleted_count": deleted_count
+    }
 
 # ======================================================
-# 📊 RESUMEN DEL CARRITO
+# 📊 RESUMEN DEL CARRITO (MEJORADO)
 # ======================================================
 @router.get("/summary")
 def get_cart_summary(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Obtiene un resumen detallado del carrito"""
+    """Obtiene un resumen detallado del carrito (público)"""
     # Buscar carrito del usuario
     cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
+        select(Cart).where(Cart.user_id == user_id)
     ).first()
     
     if not cart:
         return {
             "total_items": 0,
             "total_amount": 0,
-            "items": []
+            "items": [],
+            "cart_exists": False
         }
-    
-    # ✅ Verificar permisos usando PermissionChecker
-    PermissionChecker.check_cart_view(current_user, cart.user_id)
     
     # Obtener items del carrito con información del producto
     cart_items = session.exec(
@@ -265,131 +267,241 @@ def get_cart_summary(
         if product:
             item_total = product.price * item.quantity
             items_summary.append({
+                "cart_item_id": item.id,
                 "product_id": product.id,
                 "product_name": product.name,
+                "description": product.description,
                 "price": product.price,
                 "quantity": item.quantity,
                 "subtotal": item_total,
-                "image_url": product.image_path
+                "image_url": product.image_url or product.image_path or "/static/no-image.png",
+                "stock_available": product.quantity,
+                "max_allowed": product.quantity
             })
             total_amount += item_total
             total_items += item.quantity
     
+    # Obtener direcciones del usuario (para checkout)
+    shipping_addresses = session.exec(
+        select(ShippingAddress).where(ShippingAddress.user_id == user_id)
+    ).all()
+    
+    # Calcular envío
+    shipping_cost = 0.0
+    if total_amount > 0 and total_amount < 100:
+        shipping_cost = 5.0  # Envío estándar
+    
     return {
+        "cart_id": cart.id,
         "total_items": total_items,
         "total_amount": round(total_amount, 2),
+        "subtotal": round(total_amount, 2),
+        "shipping_cost": shipping_cost,
+        "grand_total": round(total_amount + shipping_cost, 2),
         "items": items_summary,
-        "cart_id": cart.id,
-        "last_updated": cart.updated_at
+        "item_count": len(items_summary),
+        "shipping_addresses": [
+            {
+                "id": addr.id,
+                "full_name": addr.full_name,
+                "address_line1": addr.address_line1,
+                "city": addr.city,
+                "country": addr.country,
+                "is_default": addr.is_default
+            }
+            for addr in shipping_addresses
+        ],
+        "last_updated": cart.updated_at,
+        "cart_exists": True,
+        "free_shipping_threshold": 100,
+        "eligible_for_free_shipping": total_amount >= 100
     }
 
 # ======================================================
-# 🛍️ PROCESAR CHECKOUT
+# 💳 CHECKOUT - CREAR PEDIDO DESDE CARRITO
 # ======================================================
 @router.post("/checkout")
-def checkout(
-    shipping_address: str = None,
+def checkout_cart(
+    shipping_address_id: Optional[int] = None,
     payment_method: str = "credit_card",
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    notes: Optional[str] = None,
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
 ):
-    """Procesa el checkout y crea una orden desde el carrito"""
-    # Buscar carrito del usuario
-    cart = session.exec(
-        select(Cart).where(Cart.user_id == current_user.id)
-    ).first()
+    """Crea un pedido a partir del carrito actual"""
+    # Obtener resumen del carrito
+    cart_summary = get_cart_summary(user_id, session)
     
-    if not cart:
-        raise HTTPException(status_code=404, detail="Carrito no encontrado")
-    
-    # ✅ Verificar permisos usando PermissionChecker
-    PermissionChecker.check_cart_view(current_user, cart.user_id)
-    
-    # Obtener items del carrito
-    cart_items = session.exec(
-        select(CartItem).where(CartItem.cart_id == cart.id)
-    ).all()
-    
-    if not cart_items:
+    if not cart_summary["cart_exists"] or len(cart_summary["items"]) == 0:
         raise HTTPException(status_code=400, detail="El carrito está vacío")
     
-    # Verificar stock y calcular total
-    total_amount = 0
-    order_items_data = []
+    # Verificar stock disponible
+    out_of_stock_items = []
+    for item in cart_summary["items"]:
+        product = session.get(Product, item["product_id"])
+        if product and product.quantity < item["quantity"]:
+            out_of_stock_items.append({
+                "product_name": item["product_name"],
+                "requested": item["quantity"],
+                "available": product.quantity
+            })
     
-    for cart_item in cart_items:
-        product = session.get(Product, cart_item.product_id)
-        if not product:
-            raise HTTPException(
-                status_code=404, 
-                detail=f"Producto con ID {cart_item.product_id} no encontrado"
-            )
-        
-        # Verificar stock
-        if product.quantity < cart_item.quantity:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Stock insuficiente para '{product.name}'. Disponible: {product.quantity}, Solicitado: {cart_item.quantity}"
-            )
-        
-        # Calcular subtotal
-        subtotal = product.price * cart_item.quantity
-        total_amount += subtotal
-        
-        # Preparar datos para OrderItem
-        order_items_data.append({
-            "product_id": product.id,
-            "product_name": product.name,
-            "product_price": product.price,
-            "quantity": cart_item.quantity,
-            "subtotal": subtotal
-        })
+    if out_of_stock_items:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": "Algunos productos no tienen stock suficiente",
+                "out_of_stock_items": out_of_stock_items
+            }
+        )
     
-    # Generar número de orden único
+    # Obtener dirección de envío
+    shipping_address = None
+    if shipping_address_id:
+        shipping_address = session.get(ShippingAddress, shipping_address_id)
+        if not shipping_address or shipping_address.user_id != user_id:
+            raise HTTPException(status_code=400, detail="Dirección de envío inválida")
+    
+    # Si no se especifica dirección, usar la predeterminada
+    if not shipping_address:
+        default_address = session.exec(
+            select(ShippingAddress)
+            .where(ShippingAddress.user_id == user_id)
+            .where(ShippingAddress.is_default == True)
+            .limit(1)
+        ).first()
+        
+        if default_address:
+            shipping_address = default_address
+    
+    # Crear número de pedido único
     order_number = f"ORD-{uuid.uuid4().hex[:8].upper()}"
     
     # Crear la orden
     order = Order(
-        user_id=current_user.id,
+        user_id=user_id,
         order_number=order_number,
-        total_amount=total_amount,
-        status="confirmed",
-        shipping_address=shipping_address,
-        payment_method=payment_method
+        total_amount=cart_summary["grand_total"],
+        status="pending",
+        shipping_cost=cart_summary["shipping_cost"],
+        payment_method=payment_method,
+        notes=notes
     )
+    
+    if shipping_address:
+        order.shipping_address_text = f"{shipping_address.full_name}, {shipping_address.address_line1}, {shipping_address.city}, {shipping_address.country}"
+    
     session.add(order)
     session.commit()
     session.refresh(order)
     
     # Crear items de la orden y actualizar stock
-    for item_data in order_items_data:
-        order_item = OrderItem(
-            order_id=order.id,
-            product_id=item_data["product_id"],
-            product_name=item_data["product_name"],
-            product_price=item_data["product_price"],
-            quantity=item_data["quantity"],
-            subtotal=item_data["subtotal"]
-        )
-        session.add(order_item)
+    for item in cart_summary["items"]:
+        product = session.get(Product, item["product_id"])
+        if product:
+            # Crear order item
+            order_item = OrderItem(
+                order_id=order.id,
+                product_id=product.id,
+                product_name=product.name,
+                product_price=product.price,
+                quantity=item["quantity"],
+                subtotal=item["subtotal"]
+            )
+            session.add(order_item)
+            
+            # Actualizar stock del producto
+            product.quantity -= item["quantity"]
+            session.add(product)
+    
+    # Vaciar carrito después del checkout
+    clear_cart(user_id, session)
+    
+    # Crear envío automático si requiere envío
+    shipment_info = None
+    if cart_summary["shipping_cost"] > 0 and shipping_address:
+        from ..models import Shipment, ShippingStatus
+        from datetime import datetime, timedelta
         
-        # Actualizar stock del producto
-        product = session.get(Product, item_data["product_id"])
-        product.quantity -= item_data["quantity"]
-        session.add(product)
+        # Crear envío simple
+        tracking_number = f"TRK-{uuid.uuid4().hex[:10].upper()}"
+        shipment = Shipment(
+            order_id=order.id,
+            shipping_address_id=shipping_address.id,
+            tracking_number=tracking_number,
+            carrier="local",
+            status=ShippingStatus.PENDING,
+            shipping_cost=cart_summary["shipping_cost"],
+            total_cost=cart_summary["shipping_cost"],
+            estimated_delivery_start=datetime.utcnow() + timedelta(days=2),
+            estimated_delivery_end=datetime.utcnow() + timedelta(days=5)
+        )
+        session.add(shipment)
+        session.commit()
+        
+        shipment_info = {
+            "tracking_number": tracking_number,
+            "estimated_delivery": shipment.estimated_delivery_start.strftime("%Y-%m-%d")
+        }
     
-    # Vaciar el carrito después del checkout
-    for cart_item in cart_items:
-        session.delete(cart_item)
-    
-    cart.updated_at = datetime.utcnow()
-    session.add(cart)
     session.commit()
     
     return {
-        "message": "Orden creada exitosamente",
-        "order_number": order_number,
-        "order_id": order.id,
-        "total_amount": total_amount,
-        "status": "confirmed"
+        "message": "¡Pedido creado exitosamente!",
+        "order": {
+            "id": order.id,
+            "order_number": order.order_number,
+            "total_amount": order.total_amount,
+            "status": order.status,
+            "created_at": order.created_at
+        },
+        "shipment": shipment_info,
+        "items_count": len(cart_summary["items"]),
+        "next_steps": [
+            "El pedido está siendo procesado",
+            "Recibirás actualizaciones por email",
+            "Puedes rastrear tu envío en la sección de seguimiento"
+        ]
+    }
+
+# ======================================================
+# 📦 VERIFICAR DISPONIBILIDAD DE STOCK
+# ======================================================
+@router.get("/check-stock")
+def check_stock_availability(
+    user_id: int = 1,  # Usuario por defecto
+    session: Session = Depends(get_session)
+):
+    """Verifica si todos los productos en el carrito tienen stock suficiente"""
+    cart_summary = get_cart_summary(user_id, session)
+    
+    if not cart_summary["cart_exists"]:
+        return {
+            "all_in_stock": True,
+            "message": "Carrito vacío",
+            "details": []
+        }
+    
+    stock_issues = []
+    all_in_stock = True
+    
+    for item in cart_summary["items"]:
+        product = session.get(Product, item["product_id"])
+        if product:
+            if product.quantity < item["quantity"]:
+                all_in_stock = False
+                stock_issues.append({
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "requested": item["quantity"],
+                    "available": product.quantity,
+                    "shortage": item["quantity"] - product.quantity
+                })
+    
+    return {
+        "all_in_stock": all_in_stock,
+        "message": "Todo en stock" if all_in_stock else "Hay problemas de stock",
+        "details": stock_issues,
+        "total_items": len(cart_summary["items"]),
+        "items_with_issues": len(stock_issues)
     }

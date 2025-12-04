@@ -4,13 +4,11 @@ from typing import List, Optional
 from ..database import get_session
 from ..models import User, AuditLog, Product
 from ..auth import hash_password
-from .auth_router import get_current_user
-from ..permissions import PermissionChecker, require_admin  # ✅ Nuevos imports
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 # ======================================================
-# 👤 CREAR USUARIO
+# 👤 CREAR USUARIO (público)
 # ======================================================
 @router.post("/", response_model=User)
 def create_user(user: User, session: Session = Depends(get_session)):
@@ -35,27 +33,21 @@ def create_user(user: User, session: Session = Depends(get_session)):
     return user
 
 # ======================================================
-# 📋 LISTAR TODOS LOS USUARIOS (solo admin)
+# 📋 LISTAR TODOS LOS USUARIOS (público)
 # ======================================================
 @router.get("/", response_model=List[User])
-@require_admin  # ✅ Usar decorador
-def list_users(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
+def list_users(session: Session = Depends(get_session)):
     users = session.exec(select(User)).all()
     return users
 
 # ======================================================
-# ✏️ ACTUALIZAR USUARIO (solo admin)
+# ✏️ ACTUALIZAR USUARIO (público)
 # ======================================================
 @router.put("/{user_id}", response_model=User)
-@require_admin  # ✅ Usar decorador
 def update_user(
     user_id: int,
     updated_user: User,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
     user = session.get(User, user_id)
     if not user:
@@ -84,26 +76,24 @@ def update_user(
     return user
 
 # ======================================================
-# 🗑️ ELIMINAR USUARIO (solo admin) - CON HISTORIAL
+# 🗑️ ELIMINAR USUARIO (público)
 # ======================================================
 @router.delete("/{user_id}")
-@require_admin  # ✅ Usar decorador
 def delete_user(
     user_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
-    # 🔥 REGISTRAR EN HISTORIAL ANTES de eliminar
+    # Registrar en historial
     audit_log = AuditLog(
         action="DELETE_USER",
         target_id=user_id,
         target_name=user.username,
-        performed_by=current_user.username,
-        details=f"Usuario '{user.username}' (Rol: {user.role}) eliminado por {current_user.username}. Productos asociados: {len(user.products)}"
+        performed_by="system",
+        details=f"Usuario '{user.username}' eliminado sin autenticación"
     )
     session.add(audit_log)
     
@@ -112,17 +102,15 @@ def delete_user(
     return {"message": f"Usuario '{user.username}' eliminado correctamente"}
 
 # ======================================================
-# 🔍 BUSCAR USUARIOS (solo admin)
+# 🔍 BUSCAR USUARIOS (público)
 # ======================================================
 @router.get("/search", response_model=List[User])
-@require_admin  # ✅ Usar decorador
 def search_users(
     username: Optional[str] = None,
     role: Optional[str] = None,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
-    """Busca usuarios por nombre o rol (solo admin)"""
+    """Busca usuarios por nombre o rol (público)"""
     query = select(User)
     
     if username:
@@ -140,15 +128,11 @@ def search_users(
     return users
 
 # ======================================================
-# 📊 ESTADÍSTICAS DE USUARIOS (solo admin)
+# 📊 ESTADÍSTICAS DE USUARIOS (público)
 # ======================================================
 @router.get("/stats")
-@require_admin  # ✅ Usar decorador
-def get_users_stats(
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
-    """Estadísticas de usuarios (solo admin)"""
+def get_users_stats(session: Session = Depends(get_session)):
+    """Estadísticas de usuarios (público)"""
     users = session.exec(select(User)).all()
     
     total_users = len(users)
@@ -184,46 +168,30 @@ def get_users_stats(
     }
 
 # ======================================================
-# 🛍️ VER PRODUCTOS DE UN USUARIO ESPECÍFICO
+# 🛍️ VER PRODUCTOS DE UN USUARIO ESPECÍFICO (público)
 # ======================================================
 @router.get("/{user_id}/products", response_model=List[Product])
 def get_user_products(
     user_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
-    """Obtiene todos los productos de un usuario específico"""
+    """Obtiene todos los productos de un usuario específico (público)"""
     # Verificar que el usuario existe
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
     
-    # ✅ Usar PermissionChecker
-    from ..permissions import PermissionChecker
-    PermissionChecker.check(
-        current_user.role == "admin" or current_user.id == user_id,
-        "No tienes permisos para ver productos de otros usuarios"
-    )
-    
     return user.products
 
 # ======================================================
-# 👤 INFORMACIÓN DETALLADA DE USUARIO
+# 👤 INFORMACIÓN DETALLADA DE USUARIO (público)
 # ======================================================
 @router.get("/{user_id}/details")
 def get_user_details(
     user_id: int,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
-    """Obtiene información detallada de un usuario"""
-    # Verificar permisos
-    from ..permissions import PermissionChecker
-    PermissionChecker.check(
-        current_user.role == "admin" or current_user.id == user_id,
-        "No tienes permisos para ver esta información"
-    )
-    
+    """Obtiene información detallada de un usuario (público)"""
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")
@@ -254,17 +222,15 @@ def get_user_details(
     }
 
 # ======================================================
-# 🔄 CAMBIAR ROL DE USUARIO (solo admin)
+# 🔄 CAMBIAR ROL DE USUARIO (público)
 # ======================================================
 @router.patch("/{user_id}/role")
-@require_admin  # ✅ Usar decorador
 def change_user_role(
     user_id: int,
     new_role: str,
-    session: Session = Depends(get_session),
-    current_user: User = Depends(get_current_user)
+    session: Session = Depends(get_session)
 ):
-    """Cambia el rol de un usuario (solo admin)"""
+    """Cambia el rol de un usuario (público)"""
     user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario no encontrado")

@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}Inicio — Tienda Virtual{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Mensaje de bienvenida -->
+    <div class="col s12">
+        <div class="card blue darken-1">
+            <div class="card-content white-text">
+                <span class="card-title">
+                    <i class="material-icons left">store</i>
+                    Bienvenido a la Tienda Virtual 🛍️
+                </span>
+                <p>Proyecto integrado de Desarrollo de Software + Análisis de Algoritmos</p>
+                <p><strong>Modo sin autenticación activado</strong> - Todos los endpoints son accesibles libremente</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Características del sistema -->
+<div class="row">
+    <div class="col s12">
+        <h4 class="header blue-text">🚀 Características del Sistema</h4>
+        <p class="grey-text">Acceso completo a todas las funcionalidades sin necesidad de autenticación</p>
+    </div>
+    
+    <div class="col s12 m6 l4">
+        <div class="card hoverable">
+            <div class="card-content">
+                <span class="card-title blue-text">
+                    <i class="material-icons left">storefront</i>
+                    Catálogo Completo
+                </span>
+                <p>Explora productos con imágenes, precios y disponibilidad en tiempo real.</p>
+                <ul class="browser-default">
+                    <li>Búsqueda avanzada</li>
+                    <li>Filtros por precio y categoría</li>
+                    <li>Imágenes de productos</li>
+                    <li>Gestión de inventario</li>
+                </ul>
+            </div>
+            <div class="card-action">
+                <a href="/catalogo" class="blue-text">Ver catálogo →</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col s12 m6 l4">
+        <div class="card hoverable">
+            <div class="card-content">
+                <span class="card-title green-text">
+                    <i class="material-icons left">shopping_cart</i>
+                    Carrito Inteligente
+                </span>
+                <p>Sistema de carrito con persistencia y checkout integrado.</p>
+                <ul class="browser-default">
+                    <li>Agregar/eliminar productos</li>
+                    <li>Actualizar cantidades</li>
+                    <li>Cálculo automático de totales</li>
+                    <li>Proceso de compra seguro</li>
+                </ul>
+            </div>
+            <div class="card-action">
+                <a href="/mi-carrito" class="green-text">Ir al carrito →</a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col s12 m6 l4">
+        <div class="card hoverable">
+            <div class="card-content">
+                <span class="card-title purple-text">
+                    <i class="material-icons left">psychology</i>
+                    Algoritmos Integrados
+                </span>
+                <p>Implementación de algoritmos para Análisis y Desarrollo de Algoritmos.</p>
+                <ul class="browser-default">
+                    <li>QuickSort y MergeSort</li>
+                    <li>Algoritmo Voraz (Greedy)</li>
+                    <li>Visualización de pasos</li>
+                    <li>Análisis de complejidad</li>
+                </ul>
+            </div>
+            <div class="card-action">
+                <a href="/api/algorithms/sort" class="purple-text">Probar algoritmos →</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gestión de Usuarios -->
+<div class="row">
+    <div class="col s12">
+        <div class="card green lighten-5">
+            <div class="card-content">
+                <span class="card-title">
+                    <i class="material-icons left green-text">people</i>
+                    Gestión de Usuarios
+                </span>
+                <p>Ahora puedes crear y gestionar usuarios directamente desde la interfaz web:</p>
+                
+                <div class="row">
+                    <div class="col s12 m4">
+                        <div class="card-panel">
+                            <h6><i class="material-icons left blue-text">person_add</i>Crear Usuario</h6>
+                            <p>Registra nuevos usuarios con diferentes roles (cliente, vendedor, administrador).</p>
+                            <div class="center-align">
+                                <a href="/registro" class="btn waves-effect waves-light blue">
+                                    <i class="material-icons left">person_add</i>
+                                    Crear Usuario
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col s12 m4">
+                        <div class="card-panel">
+                            <h6><i class="material-icons left green-text">list</i>Ver Usuarios</h6>
+                            <p>Explora todos los usuarios registrados en el sistema con sus estadísticas.</p>
+                            <div class="center-align">
+                                <a href="/usuarios" class="btn waves-effect waves-light green">
+                                    <i class="material-icons left">people</i>
+                                    Ver Usuarios
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col s12 m4">
+                        <div class="card-panel">
+                            <h6><i class="material-icons left orange-text">login</i>Página de Acceso</h6>
+                            <p>Información sobre el modo sin autenticación y cómo funciona el sistema.</p>
+                            <div class="center-align">
+                                <a href="/acceder" class="btn waves-effect waves-light orange">
+                                    <i class="material-icons left">info</i>
+                                    Más Información
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Endpoints disponibles -->
+<div class="row">
+    <div class="col s12">
+        <div class="card grey lighten-4">
+            <div class="card-content">
+                <span class="card-title">
+                    <i class="material-icons left">api</i>
+                    Endpoints Disponibles
+                </span>
+                <div class="row">
+                    <div class="col s12 m4">
+                        <h6>Productos</h6>
+                        <ul>
+                            <li><a href="/api/products/list">Listar productos</a></li>
+                            <li><a href="/api/products/search">Búsqueda avanzada</a></li>
+                            <li><a href="/api/products/featured">Productos destacados</a></li>
+                        </ul>
+                    </div>
+                    <div class="col s12 m4">
+                        <h6>Usuarios</h6>
+                        <ul>
+                            <li><a href="/api/users">Listar usuarios</a></li>
+                            <li><a href="/api/users/stats">Estadísticas</a></li>
+                            <li><a href="/api/auth/register">Crear usuario (API)</a></li>
+                        </ul>
+                    </div>
+                    <div class="col s12 m4">
+                        <h6>Algoritmos</h6>
+                        <ul>
+                            <li><a href="/api/algorithms/sort">Ordenamiento</a></li>
+                            <li><a href="/api/algorithms/greedy/best-products">Algoritmo Voraz</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Verificar autenticación cuando se carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Página cargada en modo sin autenticación');
+});
+
+// Función para probar algoritmos rápidamente
+function testAlgorithm(algorithm) {
+    const algorithms = {
+        'quicksort': '/api/algorithms/sort?method=quicksort&by=price',
+        'mergesort': '/api/algorithms/sort?method=mergesort&by=price',
+        'greedy': '/api/algorithms/greedy/best-products?budget=100'
+    };
+    
+    if (algorithms[algorithm]) {
+        window.open(algorithms[algorithm], '_blank');
+    }
+}
+</script>
+
+<style>
+.card.hoverable {
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card.hoverable:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}
